@@ -1,0 +1,17 @@
+# 模型文件太大不上传
+*.pt
+
+# 视频输出
+runs/
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
+
+# 系统文件
+.DS_Store
+Thumbs.db
