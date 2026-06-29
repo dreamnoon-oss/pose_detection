@@ -1,0 +1,189 @@
+"""Detection algorithms for driver action recognition.
+
+Each function receives ``keypoints_obj`` (ultralytics Keypoints, multi-person) and
+iterates over every detected person + arm side, returning on the first match.
+"""
+
+import math
+
+from .config import CONF_THRESHOLD, ARM_SIDES
+from .geometry import angle_between, min_angle_to_rect, segments_intersect
+
+
+# ---------------------------------------------------------------------------
+# Approach A: arm parallel to reference line (+ optional elbow fallback)
+# ---------------------------------------------------------------------------
+
+def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
+                               min_arm_len=30, angle_threshold=40,
+                               allow_elbow=False):
+    """Check whether any person's arm is roughly parallel to a reference line.
+
+    Args:
+        keypoints_obj: ultralytics ``Keypoints`` (multi-person).
+        line_pts: ``[(x1,y1), (x2,y2)]`` defining the reference line.
+        min_arm_len: minimum arm pixel length to consider.
+        angle_threshold: maximum angle (degrees) between arm and line to count as parallel.
+        allow_elbow: if True and wrist is below confidence, fall back to shoulder→elbow.
+
+    Returns:
+        ``(is_parallel, side, angle, far_point, shoulder)``
+    """
+    if keypoints_obj is None or line_pts is None:
+        return False, None, None, None, None
+
+    line_dir = (line_pts[1][0] - line_pts[0][0],
+                line_pts[1][1] - line_pts[0][1])
+
+    for xy, conf in _iter_persons(keypoints_obj):
+        for shoulder_id, wrist_id, elbow_id, side in ARM_SIDES:
+            if conf[shoulder_id] <= CONF_THRESHOLD:
+                continue
+
+            shoulder = (float(xy[shoulder_id][0]), float(xy[shoulder_id][1]))
+
+            far_id = None
+            if conf[wrist_id] > CONF_THRESHOLD:
+                far_id = wrist_id
+            elif allow_elbow and conf[elbow_id] > CONF_THRESHOLD:
+                far_id = elbow_id
+
+            if far_id is None:
+                continue
+
+            far_pt = (float(xy[far_id][0]), float(xy[far_id][1]))
+            arm_dir = (far_pt[0] - shoulder[0], far_pt[1] - shoulder[1])
+            if math.hypot(*arm_dir) <= min_arm_len:
+                continue
+
+            ang = angle_between(arm_dir, line_dir)
+            if ang < angle_threshold:
+                return True, side, ang, far_pt, shoulder
+
+    return False, None, None, None, None
+
+
+# ---------------------------------------------------------------------------
+# Approach B: arm segment passes through a rectangular region
+# ---------------------------------------------------------------------------
+
+def check_arm_passes_region(keypoints_obj, region_xywh, *, min_arm_len=30):
+    """Check whether any person's shoulder→wrist segment crosses (or lands inside) a rectangle.
+
+    Returns:
+        ``(is_passing, side, angle, wrist, shoulder)``
+    """
+    if keypoints_obj is None:
+        return False, None, None, None, None
+
+    rx, ry, rw, rh = region_xywh
+    edges = [
+        ((rx, ry), (rx + rw, ry)),
+        ((rx, ry + rh), (rx + rw, ry + rh)),
+        ((rx, ry), (rx, ry + rh)),
+        ((rx + rw, ry), (rx + rw, ry + rh)),
+    ]
+
+    for xy, conf in _iter_persons(keypoints_obj):
+        for shoulder_id, wrist_id, _elbow_id, side in ARM_SIDES:
+            if conf[shoulder_id] <= CONF_THRESHOLD or conf[wrist_id] <= CONF_THRESHOLD:
+                continue
+
+            shoulder = (float(xy[shoulder_id][0]), float(xy[shoulder_id][1]))
+            wrist = (float(xy[wrist_id][0]), float(xy[wrist_id][1]))
+            if math.hypot(wrist[0] - shoulder[0], wrist[1] - shoulder[1]) <= min_arm_len:
+                continue
+
+            # Endpoint inside region
+            if rx <= shoulder[0] <= rx + rw and ry <= shoulder[1] <= ry + rh:
+                return True, side, 0.0, wrist, shoulder
+            if rx <= wrist[0] <= rx + rw and ry <= wrist[1] <= ry + rh:
+                return True, side, 0.0, wrist, shoulder
+
+            # Segment crosses any region edge
+            for e1, e2 in edges:
+                if segments_intersect(shoulder, wrist, e1, e2):
+                    return True, side, 0.0, wrist, shoulder
+
+    return False, None, None, None, None
+
+
+# ---------------------------------------------------------------------------
+# Approach C: angle-based pointing toward a region (legacy / Baoshan variant)
+# ---------------------------------------------------------------------------
+
+def check_pointing(keypoints_obj, region_xywh, *,
+                   min_arm_len=30, angle_threshold=30):
+    """Check whether any person's arm points toward a region (angle-based).
+
+    Returns:
+        ``(is_pointing, side, angle, wrist, shoulder)``
+    """
+    if keypoints_obj is None:
+        return False, None, None, None, None
+
+    for xy, conf in _iter_persons(keypoints_obj):
+        for shoulder_id, wrist_id, _elbow_id, side in ARM_SIDES:
+            if conf[shoulder_id] <= CONF_THRESHOLD or conf[wrist_id] <= CONF_THRESHOLD:
+                continue
+
+            shoulder = (float(xy[shoulder_id][0]), float(xy[shoulder_id][1]))
+            wrist = (float(xy[wrist_id][0]), float(xy[wrist_id][1]))
+            arm_dir = (wrist[0] - shoulder[0], wrist[1] - shoulder[1])
+            if math.hypot(*arm_dir) <= min_arm_len:
+                continue
+
+            ang = min_angle_to_rect(wrist, arm_dir, region_xywh)
+            if ang < angle_threshold:
+                return True, side, ang, wrist, shoulder
+
+    return False, None, None, None, None
+
+
+def check_pointing_with_line(keypoints_obj, region_xywh, line_pts, *,
+                             min_arm_len=30, line_angle_threshold=40,
+                             loose_angle_threshold=55):
+    """Combined check: arm parallel to line AND roughly toward region.
+
+    Returns:
+        ``(is_pointing, side, angle, wrist, shoulder)``
+    """
+    if keypoints_obj is None or line_pts is None:
+        return False, None, None, None, None
+
+    line_dir = (line_pts[1][0] - line_pts[0][0],
+                line_pts[1][1] - line_pts[0][1])
+
+    for xy, conf in _iter_persons(keypoints_obj):
+        for shoulder_id, wrist_id, _elbow_id, side in ARM_SIDES:
+            if conf[shoulder_id] <= CONF_THRESHOLD or conf[wrist_id] <= CONF_THRESHOLD:
+                continue
+
+            shoulder = (float(xy[shoulder_id][0]), float(xy[shoulder_id][1]))
+            wrist = (float(xy[wrist_id][0]), float(xy[wrist_id][1]))
+            arm_dir = (wrist[0] - shoulder[0], wrist[1] - shoulder[1])
+            if math.hypot(*arm_dir) <= min_arm_len:
+                continue
+
+            ang_to_line = angle_between(arm_dir, line_dir)
+            if ang_to_line > line_angle_threshold:
+                continue
+
+            ang_to_rect = min_angle_to_rect(wrist, arm_dir, region_xywh)
+            if ang_to_rect < loose_angle_threshold:
+                return True, side, ang_to_rect, wrist, shoulder
+
+    return False, None, None, None, None
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _iter_persons(keypoints_obj):
+    """Yield ``(xy, conf)`` numpy arrays for each detected person."""
+    for person_idx in range(len(keypoints_obj)):
+        kps = keypoints_obj[person_idx]
+        xy = kps.xy[0].cpu().numpy()
+        conf = kps.conf[0].cpu().numpy()
+        yield xy, conf

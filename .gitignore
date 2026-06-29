@@ -1,12 +1,14 @@
-# 模型文件太大不上传
+# 模型文件（体积过大）
 *.pt
 
-# 视频输出
+# 输出视频
+output/*.mp4
 runs/
 
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
 
 # IDE
 .idea/
