@@ -7,9 +7,10 @@
 ```
 pose_detection/
 ├── README.md
+├── pyproject.toml                # 项目配置
 ├── requirements.txt
 ├── .gitignore
-├── src/                          # 核心源码包
+├── src/                          # Python 包
 │   ├── __init__.py
 │   ├── config.py                 # 全局配置常量
 │   ├── geometry.py               # 几何计算（角度、线段相交）
@@ -19,17 +20,11 @@ pose_detection/
 │   ├── annotation.py             # 标注工具（区域框选、参考线）
 │   └── player.py                 # 交互式视频播放器
 ├── scripts/                      # 运行入口
-│   ├── run_shangtichang2.py      # 上体场2视频（平行线+穿区域）
-│   └── run_baoshan1.py           # 宝山1视频（角度指向）
+│   ├── run_shangtichang2.py      # 上体场2视频（主要版本）
+│   └── run_baoshan1.py           # 宝山1视频
 ├── data/                         # 标注数据
-│   ├── regions_shangtichang2.json
-│   └── regions_baoshan1.json
 ├── models/                       # 模型文件（需自行下载）
-│   └── .gitkeep
-├── output/                       # 输出视频
-│   └── .gitkeep
-└── docs/
-    └── PROJECT_STATUS.md          # 项目进度文档
+└── output/                       # 输出视频
 ```
 
 ## 快速开始
@@ -37,9 +32,9 @@ pose_detection/
 ### 环境要求
 
 - Python 3.10+
-- CUDA (推荐，用于 GPU 推理)
+- CUDA（推荐，用于 GPU 推理）
 
-### 安装
+### 安装依赖
 
 ```bash
 pip install -r requirements.txt
@@ -49,13 +44,17 @@ pip install -r requirements.txt
 
 将 `yolo26x-pose.pt` 放入 `models/` 目录。
 
+### PyCharm 设置
+
+首次打开项目后，右键 `pose_detection` 根目录 → **Mark Directory as** → **Sources Root**，消除 `src` 包的红色波浪线。
+
 ### 运行
 
 ```bash
-# 上体场2视频（主要版本）
+# 上体场2视频（主要版本，平行线 + 穿区域检测）
 python scripts/run_shangtichang2.py
 
-# 宝山1视频
+# 宝山1视频（角度法检测）
 python scripts/run_baoshan1.py
 ```
 
@@ -64,7 +63,7 @@ python scripts/run_baoshan1.py
 | 按键 | 功能 |
 |------|------|
 | `空格` | 暂停 / 继续 |
-| `Q` | 退出 |
+| `Q` | 退出 / 关闭窗口 |
 | 拖拽进度条 | 跳转到指定帧 |
 | **暂停时可用** | |
 | `R` | 鼠标框选矩形区域 |
@@ -76,19 +75,39 @@ python scripts/run_baoshan1.py
 
 ## 检测策略
 
-| 类型 | 说明 | 使用场景 |
-|------|------|---------|
-| `parallel_line` | 手臂方向与参考线平行 | 手指呼唤、手动关门 |
-| `pass_region` | 手臂穿过目标区域 | 确认指示灯 |
-| `pointing` | 手臂角度朝向区域 | 备选方案 |
-| `pointing_with_line` | 平行于线 + 朝向区域 | 双重判断 |
+| 类型 | 函数 | 说明 |
+|------|------|------|
+| `parallel_line` | `check_arm_parallel_to_line()` | 肩→腕向量与参考线夹角 < 40°，可回退用肘部 |
+| `pass_region` | `check_arm_passes_region()` | 肩→腕线段穿过/落在矩形区域内 |
+| `pointing` | `check_pointing()` | 手臂方向与区域最小夹角 < 30° |
+| `pointing_with_line` | `check_pointing_with_line()` | 手臂平行于线 且 朝向区域 |
+
+### 参数
+
+| 参数 | 值 | 说明 |
+|------|----|------|
+| 关键点 | 5-12 | 肩/肘/腕/髋 |
+| 平行角度阈值 | 40° | 手臂与参考线最大夹角 |
+| 持续帧数 | 15 | 连续命中帧数确认动作 |
+| 帧衰减 | -2/帧 | 容忍短暂丢帧 |
+| 最小手臂长度 | 30px | 过滤无效检测 |
+| 置信度阈值 | 0.5 | 关键点置信度 |
+
+## 动作序列（上体场2）
+
+| 动作 | 类型 | 目标 | 备注 |
+|------|------|------|------|
+| 动作1 | `parallel_line` | line_1 | 手指呼唤 |
+| 动作2 | `parallel_line` | line_2 | 手动关门，允许肘部回退 |
+| 动作3 | `parallel_line` | line_1 | 确认夹缝 |
+| 动作4 | `pass_region` | region_1 | 确认站台指示灯 |
 
 ## 动作规范
 
-基于申通技术中心文档，覆盖 5 类标准动作：
+基于申通技术中心文档：
 
-1. 开门后手指呼唤
-2. 手动关门
-3. 关门后确认夹缝
-4. 开车前确认站台指示灯
-5. 开车前确认道岔（可选）
+1. 开门后手指呼唤 — 手臂举起与肩平行，维持 2 秒以上
+2. 手动关门 — 手臂抬起约 60°，维持 2 秒以上
+3. 关门后确认夹缝 — 手臂举起与肩平行指向夹缝，维持 2 秒以上
+4. 开车前确认站台指示灯 — 手臂举起 ≥ 肩部指向指示灯，维持 1 秒以上
+5. 开车前确认道岔（可选）— 手臂举起与肩平行指向道岔，维持 1 秒以上
