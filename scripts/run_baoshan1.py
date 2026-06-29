@@ -30,12 +30,10 @@ ACTION_SEQUENCE = [
 ]
 
 DETECTION_KWARGS = {
-    "angle_threshold": 30,       # for check_pointing
-    "line_angle_threshold": 40,  # for check_pointing_with_line
-    "loose_angle_threshold": 55, # for check_pointing_with_line
+    "angle_threshold": 30,
+    "line_angle_threshold": 40,
+    "loose_angle_threshold": 55,
     "min_arm_len": 30,
-    "hold_frames": 15,
-    "frame_decay": 2,
 }
 
 # ---------------------------------------------------------------------------

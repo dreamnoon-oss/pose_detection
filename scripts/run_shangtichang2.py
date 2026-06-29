@@ -29,10 +29,8 @@ ACTION_SEQUENCE = [
 ]
 
 DETECTION_KWARGS = {
-    "angle_threshold": 40,   # max angle between arm and reference line
+    "angle_threshold": 40,
     "min_arm_len": 30,
-    "hold_frames": 15,
-    "frame_decay": 2,
 }
 
 # ---------------------------------------------------------------------------
