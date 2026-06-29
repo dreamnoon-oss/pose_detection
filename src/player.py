@@ -49,6 +49,9 @@ class VideoPlayer:
         self._print_help()
 
         while True:
+            if not self._window_exists():
+                break
+
             if self._user_seeking:
                 self._handle_seek()
                 continue
@@ -141,11 +144,11 @@ class VideoPlayer:
         self.out.write(annotated)
 
         # Progress tracking
-        cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-        cv2.setTrackbarPos("Progress", self.window_name, cur)
-        viz.draw_frame_info(annotated, cur, self.total_frames, self.fps)
-
-        cv2.imshow(self.window_name, annotated)
+        if self._window_exists():
+            cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+            cv2.setTrackbarPos("Progress", self.window_name, cur)
+            viz.draw_frame_info(annotated, cur, self.total_frames, self.fps)
+            cv2.imshow(self.window_name, annotated)
 
         wait_ms = max(1, self.delay - int(infer_ms))
         return cv2.waitKey(wait_ms) & 0xFF
@@ -208,6 +211,12 @@ class VideoPlayer:
     def _on_trackbar(self, pos):
         self._user_seeking = True
         self._trackbar_pos = pos
+
+    def _window_exists(self):
+        try:
+            return cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) >= 1
+        except cv2.error:
+            return False
 
     # ------------------------------------------------------------------
     # Internal: help text
