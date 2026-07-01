@@ -16,7 +16,8 @@ from .geometry import angle_between, min_angle_to_rect, segments_intersect
 
 def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
                                min_arm_len=30, angle_threshold=40,
-                               allow_elbow=False):
+                               allow_elbow=False,
+                               min_arm_torso_angle=0.0):
     """Check whether any person's arm is roughly parallel to a reference line.
 
     Args:
@@ -25,6 +26,8 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
         min_arm_len: minimum arm pixel length to consider.
         angle_threshold: maximum angle (degrees) between arm and line to count as parallel.
         allow_elbow: if True and wrist is below confidence, fall back to shoulder→elbow.
+        min_arm_torso_angle: if > 0, the arm→torso angle (shoulder→wrist vs
+            shoulder→hip, same side) must exceed this value. Default 0 = no check.
 
     Returns:
         ``(is_parallel, side, angle, far_point, shoulder)``
@@ -34,6 +37,8 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
 
     line_dir = (line_pts[1][0] - line_pts[0][0],
                 line_pts[1][1] - line_pts[0][1])
+
+    _shoulder_to_hip = {5: 11, 6: 12}  # same-side hip for each shoulder
 
     for xy, conf in _iter_persons(keypoints_obj):
         for shoulder_id, wrist_id, elbow_id, side in ARM_SIDES:
@@ -57,8 +62,20 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
                 continue
 
             ang = angle_between(arm_dir, line_dir)
-            if ang < angle_threshold:
-                return True, side, ang, far_pt, shoulder
+            if ang >= angle_threshold:
+                continue
+
+            # Optional: arm vs torso angle check (same-side shoulder→hip)
+            if min_arm_torso_angle > 0:
+                hip_id = _shoulder_to_hip.get(shoulder_id)
+                if hip_id is not None and conf[hip_id] > CONF_THRESHOLD:
+                    hip = (float(xy[hip_id][0]), float(xy[hip_id][1]))
+                    torso_dir = (hip[0] - shoulder[0], hip[1] - shoulder[1])
+                    torso_ang = angle_between(arm_dir, torso_dir)
+                    if torso_ang <= min_arm_torso_angle:
+                        continue
+
+            return True, side, ang, far_pt, shoulder
 
     return False, None, None, None, None
 
@@ -67,8 +84,13 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
 # Approach B: arm segment passes through a rectangular region
 # ---------------------------------------------------------------------------
 
-def check_arm_passes_region(keypoints_obj, region_xywh, *, min_arm_len=30):
-    """Check whether any person's shoulder→wrist segment crosses (or lands inside) a rectangle.
+def check_arm_passes_region(keypoints_obj, region_xywh, *, min_arm_len=30,
+                            extend_ray=True):
+    """Check whether any person's shoulder→wrist segment crosses a rectangle.
+
+    If *extend_ray* is True (the default), the arm direction is extended 3x
+    beyond the wrist so that pointing *toward* the region counts even when
+    the hand hasn't reached it yet.
 
     Returns:
         ``(is_passing, side, angle, wrist, shoulder)``
@@ -91,18 +113,30 @@ def check_arm_passes_region(keypoints_obj, region_xywh, *, min_arm_len=30):
 
             shoulder = (float(xy[shoulder_id][0]), float(xy[shoulder_id][1]))
             wrist = (float(xy[wrist_id][0]), float(xy[wrist_id][1]))
-            if math.hypot(wrist[0] - shoulder[0], wrist[1] - shoulder[1]) <= min_arm_len:
+            arm_vec = (wrist[0] - shoulder[0], wrist[1] - shoulder[1])
+            arm_len = math.hypot(*arm_vec)
+            if arm_len <= min_arm_len:
                 continue
+
+            # Build the test segment: shoulder → wrist (optionally extended)
+            far_pt = wrist
+            if extend_ray:
+                # Extend 3× beyond the wrist in the arm direction
+                dx = arm_vec[0] / arm_len
+                dy = arm_vec[1] / arm_len
+                extend_len = arm_len * 6.0
+                far_pt = (wrist[0] + dx * extend_len,
+                          wrist[1] + dy * extend_len)
 
             # Endpoint inside region
             if rx <= shoulder[0] <= rx + rw and ry <= shoulder[1] <= ry + rh:
                 return True, side, 0.0, wrist, shoulder
-            if rx <= wrist[0] <= rx + rw and ry <= wrist[1] <= ry + rh:
+            if rx <= far_pt[0] <= rx + rw and ry <= far_pt[1] <= ry + rh:
                 return True, side, 0.0, wrist, shoulder
 
-            # Segment crosses any region edge
+            # Segment (or extended ray) crosses any region edge
             for e1, e2 in edges:
-                if segments_intersect(shoulder, wrist, e1, e2):
+                if segments_intersect(shoulder, far_pt, e1, e2):
                     return True, side, 0.0, wrist, shoulder
 
     return False, None, None, None, None
