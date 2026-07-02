@@ -1,8 +1,8 @@
 # 模型文件（体积过大）
 *.pt
 
-# 输出视频
-output/*.mp4
+# 输出
+output/
 runs/
 
 # Python
