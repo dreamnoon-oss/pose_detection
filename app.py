@@ -5,15 +5,14 @@ import os
 import time
 import tempfile
 import threading
+import base64
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import streamlit as st
 import cv2
-import numpy as np
 from ultralytics import YOLO
-from PIL import Image
 
 from src.config import MODEL_DIR, DATA_DIR, OUTPUT_DIR
 from src.detector import ParallelDetector
@@ -21,7 +20,7 @@ from src.analyzer import SequenceAnalyzer
 from src.annotation import load_annotations
 from src.visualization import (
     draw_pose, draw_annotations, draw_frame_info,
-    draw_arm_rays, draw_status_overlay, draw_analysis_result,
+    draw_arm_rays, draw_status_overlay,
 )
 
 # ---------------------------------------------------------------------------
@@ -35,7 +34,20 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Shared state for cross-thread communication
+# Disable Streamlit's default header/footer for less visual noise
+# ---------------------------------------------------------------------------
+st.markdown("""
+<style>
+    header[data-testid="stHeader"] {display: none;}
+    footer {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    .stApp {margin-top: -50px;}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# Shared state
 # ---------------------------------------------------------------------------
 
 class DetectionState:
@@ -43,18 +55,20 @@ class DetectionState:
     def __init__(self):
         self.lock = threading.Lock()
         self.progress = 0
-        self.frame_bgr = None      # latest annotated frame
+        self.frame_jpg = None       # JPEG bytes of latest annotated frame
         self.events = []
         self.active = {}
         self.done = False
-        self.result = None         # (output_path, events, analysis, total, fps)
+        self.result = None
         self.error = None
 
     def update(self, *, progress=None, frame_bgr=None, events=None,
                active=None, done=None, result=None, error=None):
         with self.lock:
             if progress is not None: self.progress = progress
-            if frame_bgr is not None: self.frame_bgr = frame_bgr.copy()
+            if frame_bgr is not None:
+                ok, buf = cv2.imencode('.jpg', frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                if ok: self.frame_jpg = buf.tobytes()
             if events is not None: self.events = list(events)
             if active is not None: self.active = dict(active)
             if done is not None: self.done = done
@@ -65,7 +79,7 @@ class DetectionState:
         with self.lock:
             return {
                 "progress": self.progress,
-                "frame_bgr": self.frame_bgr.copy() if self.frame_bgr is not None else None,
+                "frame_jpg": self.frame_jpg,
                 "events": list(self.events),
                 "active": dict(self.active),
                 "done": self.done,
@@ -144,10 +158,10 @@ SCENARIO_CONFIGS = {
             {"name": "rule_C", "type": "pass_region", "target_region": "region_1"},
         ],
         "action_mapping": [
-            {"action": "动作1 — 手指呼唤", "rule": "rule_A", "occurrence": 1},
-            {"action": "动作2 — 手动关门", "rule": "rule_B", "occurrence": 1},
-            {"action": "动作3 — 确认夹缝", "rule": "rule_A", "occurrence": 2},
-            {"action": "动作4 — 确认指示灯", "rule": "rule_C", "occurrence": 1},
+            {"action": "动作1 - 手指呼唤", "rule": "rule_A", "occurrence": 1},
+            {"action": "动作2 - 手动关门", "rule": "rule_B", "occurrence": 1},
+            {"action": "动作3 - 确认夹缝", "rule": "rule_A", "occurrence": 2},
+            {"action": "动作4 - 确认指示灯", "rule": "rule_C", "occurrence": 1},
         ],
     },
     "宝山1": {
@@ -161,22 +175,23 @@ SCENARIO_CONFIGS = {
              "target_region": "region_4", "ref_line": "line_1"},
         ],
         "action_mapping": [
-            {"action": "动作1 — 指向前方", "rule": "rule_A", "occurrence": 1},
-            {"action": "动作2 — 确认区域2", "rule": "rule_B", "occurrence": 1},
-            {"action": "动作3 — 再次指向前方", "rule": "rule_A", "occurrence": 2},
-            {"action": "动作4 — 确认区域3", "rule": "rule_C", "occurrence": 1},
-            {"action": "动作5 — 确认区域4", "rule": "rule_D", "occurrence": 1},
+            {"action": "动作1 - 指向前方", "rule": "rule_A", "occurrence": 1},
+            {"action": "动作2 - 确认区域2", "rule": "rule_B", "occurrence": 1},
+            {"action": "动作3 - 再次指向前方", "rule": "rule_A", "occurrence": 2},
+            {"action": "动作4 - 确认区域3", "rule": "rule_C", "occurrence": 1},
+            {"action": "动作5 - 确认区域4", "rule": "rule_D", "occurrence": 1},
         ],
     },
 }
 
+
 # ---------------------------------------------------------------------------
-# Processing engine (runs in background thread)
+# Background detection thread
 # ---------------------------------------------------------------------------
 
 def _process_thread(video_path, detector, model, action_mapping,
                     output_path, state):
-    """Background thread target: process video frame by frame."""
+    """Run detection in a background thread."""
     try:
         cap = cv2.VideoCapture(video_path)
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -190,6 +205,7 @@ def _process_thread(video_path, detector, model, action_mapping,
         detector.reset()
         frame_idx = 0
         _last_pct = -1
+        _last_push = 0
 
         while True:
             ret, frame = cap.read()
@@ -210,15 +226,15 @@ def _process_thread(video_path, detector, model, action_mapping,
 
             out.write(annotated)
 
-            # Update shared state (throttle to ~every 2% to avoid lock contention)
             pct = int((frame_idx + 1) / total * 100)
+
+            # Push frame + progress to shared state every ~4 frames
+            if frame_idx - _last_push >= 4 or pct != _last_pct:
+                state.update(progress=pct, frame_bgr=annotated,
+                             events=detector.events, active=active)
+                _last_push = frame_idx
+
             if pct != _last_pct:
-                state.update(
-                    progress=pct,
-                    frame_bgr=annotated,
-                    events=detector.events,
-                    active=active,
-                )
                 _last_pct = pct
 
             frame_idx += 1
@@ -229,14 +245,13 @@ def _process_thread(video_path, detector, model, action_mapping,
         analyzer = SequenceAnalyzer(detector.events, action_mapping, fps=fps)
         analysis = analyzer.analyze()
         state.update(
-            progress=100, frame_bgr=annotated,
-            events=detector.events, active={},
-            done=True,
+            progress=100, events=detector.events, active={}, done=True,
             result=(output_path, list(detector.events), analysis, total, fps),
         )
 
     except Exception as e:
-        state.update(error=str(e), done=True)
+        import traceback
+        state.update(error=f"{e}\n{traceback.format_exc()}", done=True)
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +260,7 @@ def _process_thread(video_path, detector, model, action_mapping,
 st.title("司机标准动作检测系统")
 st.caption(f"场景: {scenario}")
 
-# --- Preview mode (before start) ---
+# --- Preview mode ---
 if "detection_started" not in st.session_state:
     st.session_state.detection_started = False
 
@@ -279,11 +294,10 @@ if not st.session_state.detection_started and not start:
     st.info("在左侧面板调整参数后，点击「开始检测」运行")
     st.stop()
 
-# --- Start / restart ---
+# --- Launch detection ---
 if start:
     st.session_state.detection_started = True
 
-    # Create shared state + thread if not already running
     if "detection_state" not in st.session_state:
         st.session_state.detection_state = DetectionState()
 
@@ -308,10 +322,9 @@ if start:
         )
 
         model = YOLO(model_path)
-
-        output_dir = os.path.join(OUTPUT_DIR, "streamlit")
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, f"output_{scenario}.mp4")
+        output_path = os.path.join(OUTPUT_DIR, "streamlit",
+                                   f"output_{scenario}.mp4")
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
         thread = threading.Thread(
             target=_process_thread,
@@ -324,46 +337,51 @@ if start:
         thread.start()
 
 # ---------------------------------------------------------------------------
-# Live display loop
+# Live update loop
 # ---------------------------------------------------------------------------
 if st.session_state.get("detection_started"):
     state = st.session_state.detection_state
     snap = state.snapshot()
 
-    # Layout: large video area + metrics row
     video_col, info_col = st.columns([3, 1])
 
     with video_col:
         frame_placeholder = st.empty()
+        if snap["frame_jpg"] is not None:
+            b64 = base64.b64encode(snap["frame_jpg"]).decode()
+            # Use inline HTML <img> with data URI — the DOM element is
+            # re-created on rerun but there's no separate iframe load,
+            # making the transition nearly instant.
+            frame_placeholder.markdown(
+                f'<img src="data:image/jpeg;base64,{b64}" '
+                f'style="width:100%; border-radius:6px;">'
+                f'<div style="text-align:center; color:#888; margin-top:4px;">'
+                f'进度: {snap["progress"]}%</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            frame_placeholder.info("等待检测开始...")
 
     with info_col:
         st.subheader("实时状态")
-        progress_bar = st.progress(0)
-        pct_text = st.empty()
-        event_count = st.empty()
-        active_rules = st.empty()
+        progress_bar = st.progress(snap["progress"] / 100.0)
+        pct_holder = st.empty()
+        event_holder = st.empty()
+        active_holder = st.empty()
 
-    # Populate current state
-    if snap["frame_bgr"] is not None:
-        frame_rgb = cv2.cvtColor(snap["frame_bgr"], cv2.COLOR_BGR2RGB)
-        frame_placeholder.image(frame_rgb, channels="RGB",
-                                caption=f"进度: {snap['progress']}%",
-                                use_container_width=True)
+        pct_holder.metric("进度", f"{snap['progress']}%")
+        event_holder.metric("事件数", len(snap["events"]))
 
-    progress_bar.progress(snap["progress"] / 100.0)
-    pct_text.metric("进度", f"{snap['progress']}%")
-    event_count.metric("事件数", len(snap["events"]))
+        if snap["active"]:
+            names = ", ".join(
+                f"**{k}** ({v['hold']}/{v['required']})"
+                for k, v in list(snap["active"].items())[:3]
+            )
+            active_holder.markdown(f"进行中: {names}")
+        else:
+            active_holder.caption("无活跃规则")
 
-    if snap["active"]:
-        names = ", ".join(
-            f"**{k}** ({v['hold']}/{v['required']})"
-            for k, v in list(snap["active"].items())[:3]
-        )
-        active_rules.markdown(f"进行中: {names}")
-    else:
-        active_rules.caption("无活跃规则")
-
-    # If done, show final results
+    # Done — show results
     if snap["done"]:
         if snap["error"]:
             st.error(f"检测出错: {snap['error']}")
@@ -375,7 +393,7 @@ if st.session_state.get("detection_started"):
             tab1, tab2, tab3 = st.tabs(["📊 总览", "🎬 检测视频", "📋 事件与分析"])
 
             with tab1:
-                m1, m2, m3, m4 = st.columns(4)
+                m1, m2, m3 = st.columns(3)
                 m1.metric("总帧数", total_frames)
                 m2.metric("检测事件", len(events))
                 m3.metric("视频FPS", f"{video_fps:.1f}")
@@ -390,11 +408,11 @@ if st.session_state.get("detection_started"):
                                    "右臂" if a.get("side") == "R" else "?"
                             ts = a.get("timestamp", 0)
                             st.success(
-                                f"✅ **{a['action']}**  —  {side}  "
+                                f"✅ **{a['action']}**  -  {side}  "
                                 f"@ {ts:.1f}s"
                             )
                         else:
-                            st.error(f"❌ **{a['action']}**  —  未检测到")
+                            st.error(f"❌ **{a['action']}**  -  未检测到")
 
                 with col_b:
                     st.subheader("合规性")
@@ -413,8 +431,6 @@ if st.session_state.get("detection_started"):
                 if os.path.exists(output_path):
                     with open(output_path, "rb") as f:
                         st.video(f.read())
-                else:
-                    st.error("视频生成失败")
 
             with tab3:
                 st.subheader("原始事件")
@@ -425,14 +441,12 @@ if st.session_state.get("detection_started"):
                          for e in events],
                         use_container_width=True, hide_index=True,
                     )
-
                 st.subheader("分析报告")
                 analyzer = SequenceAnalyzer(
                     events, SCENARIO_CONFIGS[scenario]["action_mapping"],
                     fps=video_fps)
                 st.code(analyzer.summary(), language=None)
 
-        # Reset button
         if st.button("🔄 重新检测", use_container_width=True):
             for key in ["detection_started", "detection_state",
                         "detection_thread", "detector"]:
@@ -441,6 +455,6 @@ if st.session_state.get("detection_started"):
 
         st.stop()
 
-    # Not done yet — rerun after a short delay for live update
-    time.sleep(0.15)
+    # Not done — rerun for live update
+    time.sleep(0.4)
     st.rerun()
