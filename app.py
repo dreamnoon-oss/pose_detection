@@ -314,12 +314,16 @@ PROGRESS_HTML = """
                             '<h3 style="color:#4caf50;">✅ 检测完成!</h3>' +
                             '<p>正在加载结果...</p>';
                     }
-                    // Notify Streamlit
-                    window.parent.postMessage({
-                        isStreamlitMessage: true,
-                        type: 'streamlit:setComponentValue',
-                        data: {done: true},
-                    }, '*');
+                    // Notify Streamlit — retry until the API is ready
+                    function sendDone() {
+                        var s = window.Streamlit;
+                        if (s && s.setComponentValue) {
+                            s.setComponentValue({done: true});
+                        } else {
+                            setTimeout(sendDone, 200);
+                        }
+                    }
+                    sendDone();
                 }
             })
             .catch(function() {});
@@ -409,20 +413,31 @@ if st.session_state.phase == "preview":
 
 # --- State: running ---
 if st.session_state.phase == "running":
-    # Show the JS progress component — it self-updates with zero Streamlit reruns
+    # Show the JS progress component — self-updating, no Streamlit reruns needed
     component_value = components.html(PROGRESS_HTML, height=220)
 
-    if component_value and component_value.get("done"):
+    # component_value is a dict only after JS calls setComponentValue;
+    # on first render it's None or a DeltaGenerator — must guard.
+    done_signal = (
+        isinstance(component_value, dict) and component_value.get("done")
+    )
+    if done_signal or st.session_state.get("_result") or st.session_state.get("_error"):
         st.session_state.phase = "results"
         st.rerun()
 
-    # Also check session state (written by thread)
-    if st.session_state.get("_result") or st.session_state.get("_error"):
-        st.session_state.phase = "results"
-        st.rerun()
+    # Safety fallback: check progress.json from Python side every 4s
+    # (very infrequent, negligible visual impact)
+    try:
+        with open(PROGRESS_FILE, 'r') as f:
+            if json.load(f).get('done'):
+                if st.session_state.get("_result") or st.session_state.get("_error"):
+                    st.session_state.phase = "results"
+                    st.rerun()
+    except Exception:
+        pass
 
-    # No rerun loop — page stays completely static while JS polls
-    st.stop()
+    time.sleep(4)
+    st.rerun()
 
 # --- State: results ---
 if st.session_state.phase == "results":
