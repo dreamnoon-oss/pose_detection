@@ -28,7 +28,7 @@ class VideoPlayer:
 
     def __init__(self, model, video_path, detector, action_mapping=None, *,
                  annotations_file, output_dir, output_name="pose_output.mp4",
-                 model_conf=0.5):
+                 model_conf=0.5, imgsz=640, frame_skip=0, half=False):
         self.model = model
         self.video_path = video_path
         self.detector = detector
@@ -37,6 +37,9 @@ class VideoPlayer:
         self.output_dir = output_dir
         self.output_name = output_name
         self.model_conf = model_conf
+        self.imgsz = imgsz            # model input resolution
+        self.frame_skip = frame_skip  # 0=every frame, 1=every 2nd, 2=every 3rd, etc.
+        self.half = half              # FP16 inference
 
         self.cap = None
         self.out = None
@@ -49,6 +52,7 @@ class VideoPlayer:
         self._last_metrics = []
         self._last_kp = None
         self._last_raw_frame = None
+        self._last_results = None
 
         # Train detector (optional — enabled when background + track_roi exist)
         self.train_detector = None
@@ -164,8 +168,14 @@ class VideoPlayer:
 
         t0 = time.time()
 
-        # Pose detection
-        results = self.model(frame, verbose=False, conf=self.model_conf)
+        # Pose detection (with frame skipping)
+        cur_frame = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+        if self.frame_skip <= 0 or cur_frame % (self.frame_skip + 1) == 0:
+            results = self.model(frame, verbose=False, conf=self.model_conf,
+                                 imgsz=self.imgsz, half=self.half)
+            self._last_results = results
+        else:
+            results = self._last_results
         kp = results[0].keypoints if results[0].keypoints is not None else None
 
         # Parallel detection

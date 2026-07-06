@@ -61,5 +61,6 @@ if __name__ == "__main__":
         annotations_file=ANNOTATIONS_FILE,
         output_dir=str(Path(OUTPUT_DIR)),
         output_name="pose_output_shangtichang.mp4",
+        imgsz=480, frame_skip=1,
     )
     player.run()
