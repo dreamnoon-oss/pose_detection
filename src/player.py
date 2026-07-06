@@ -248,27 +248,29 @@ class VideoPlayer:
             print(f"✅ 已保存 {len(self.detector.regions)} 个区域 + "
                   f"{len(self.detector.lines)} 条参考线 -> {self.annotations_file}")
 
-        elif key == ord('t') and self._paused:
-            # Cycle track_roi through existing regions
-            region_names = [r['name'] for r in self.detector.regions]
-            if not region_names:
-                print("请先用 R 框选轨道区域")
-            elif self._track_roi_name not in region_names:
-                self._track_roi_name = region_names[0]
-                print(f"track_roi -> {self._track_roi_name}")
-            else:
-                idx = region_names.index(self._track_roi_name)
-                self._track_roi_name = region_names[(idx + 1) % len(region_names)]
-                print(f"track_roi -> {self._track_roi_name}")
+        elif key == ord('t') and self._paused and self._last_frame is not None:
+            # Remove existing track region if any
+            self.detector.regions = [r for r in self.detector.regions
+                                     if r['name'] != 'track']
+            print("请框选轨道区域（回车确认，Esc 取消）...")
+            self.detector.regions = select_roi(self.window_name, self._last_frame,
+                                               self.detector.regions)
+            # Rename the newly added region to "track"
+            if self.detector.regions:
+                last = self.detector.regions[-1]
+                if last['name'].startswith('region_'):
+                    last['name'] = 'track'
+                    self._track_roi_name = 'track'
+                    print(f">>> 轨道区域已更新: {last['xywh']}")
 
         elif key == ord('b') and self._paused and self._last_raw_frame is not None:
-            if self._track_roi_name is None and self.detector.regions:
-                self._track_roi_name = self.detector.regions[0]['name']
-                print(f"track_roi 自动设为 {self._track_roi_name}（按 T 切换）")
-            cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-            save_background(self.annotations_file, self._last_raw_frame, cur,
-                           self._track_roi_name)
-            self._activate_train_detector()
+            if self._track_roi_name is None:
+                print("请先按 T 框选轨道区域")
+            else:
+                cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+                save_background(self.annotations_file, self._last_raw_frame, cur,
+                               self._track_roi_name)
+                self._activate_train_detector()
 
         elif key == ord('d') and self._paused:
             self.detector.regions = remove_last_region(self.detector.regions)
@@ -358,7 +360,7 @@ class VideoPlayer:
         print("  D    = 删除最后一个区域")
         print("  S    = 保存区域+参考线到 JSON 文件")
         print("  B    = 保存当前帧为背景参考图（轨道空闲时）")
-        print("  T    = 切换轨道监控区域（按 T 循环已有区域）")
+        print("  T    = 框选轨道监控区域（用于列车检测）")
         print("  ----- 随时可用 -----")
         print("  Z    = 重置检测器，清空所有事件")
 
