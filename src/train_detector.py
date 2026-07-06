@@ -86,6 +86,14 @@ class TrainDetector:
         lines.append("=" * 50)
         return "\n".join(lines)
 
+    def reset(self, frame_num=0):
+        """Reset internal state (call after seeking)."""
+        self.state = 'AWAY'
+        self.frame_num = frame_num
+        self.mad = 0.0
+        self.consecutive_high = 0
+        self.consecutive_low = 0
+
     @property
     def status_label(self):
         labels = {

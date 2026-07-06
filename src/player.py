@@ -296,10 +296,15 @@ class VideoPlayer:
         ret, frame = self.cap.read()
         if ret:
             self._last_raw_frame = frame.copy()
-            results = self.model(frame, verbose=False, conf=self.model_conf)
-            kp = results[0].keypoints if results[0].keypoints is not None else None
+            # Reset train detector state so it re-detects from new position
+            if self.train_detector is not None:
+                self.train_detector.reset(self._trackbar_pos)
+            results = self.model(frame, verbose=False, conf=self.model_conf,
+                                 imgsz=self.imgsz, half=self.half)
+            kp = results[0].keypoints if (results and results[0].keypoints is not None) else None
             active, _ = self.detector.update(kp)
             self._last_active = active
+            self._last_results = results
             self._last_frame = viz.draw_pose(frame, results)
             viz.draw_arm_rays(self._last_frame, kp, self.detector.regions)
             viz.draw_annotations(self._last_frame, self.detector.regions, self.detector.lines,
