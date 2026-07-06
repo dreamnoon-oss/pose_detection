@@ -139,6 +139,9 @@ class VideoPlayer:
         if self.out is not None:
             self.out.release()
         cv2.destroyAllWindows()
+        # Print train summary on manual exit too
+        if self.train_detector is not None and self.train_detector.events:
+            print("\n" + self.train_detector.summary())
         print(f"结果已保存到: {os.path.join(self.output_dir, self.output_name)}")
 
     # ------------------------------------------------------------------
