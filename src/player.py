@@ -5,8 +5,11 @@ import time
 import cv2
 
 from . import visualization as viz
-from .annotation import select_roi, draw_line_interactive, remove_last_region, save_annotations
+from .annotation import (select_roi, draw_line_interactive,
+                         remove_last_region, save_annotations, save_background,
+                         load_background_info)
 from .analyzer import SequenceAnalyzer
+from .train_detector import TrainDetector
 
 
 class VideoPlayer:
@@ -45,6 +48,25 @@ class VideoPlayer:
         self._last_active = {}
         self._last_metrics = []
         self._last_kp = None
+        self._last_raw_frame = None
+
+        # Train detector (optional — enabled when background + track_roi exist)
+        self.train_detector = None
+        bg_path, track_roi_name = load_background_info(annotations_file)
+        if bg_path and track_roi_name and os.path.exists(bg_path):
+            # Look up the ROI by name
+            track_roi = None
+            for r in detector.regions:
+                if r['name'] == track_roi_name:
+                    track_roi = r['xywh']
+                    break
+            if track_roi is not None:
+                self.train_detector = TrainDetector(
+                    bg_path, track_roi, fps=self.fps if hasattr(self, 'fps') else 1.0)
+                print(f"列车检测已启用  track_roi={track_roi_name}  "
+                      f"background={os.path.basename(bg_path)}")
+        self._last_train_state = None
+        self._last_train_mad = 0.0
 
     # ------------------------------------------------------------------
     # Public API
@@ -97,6 +119,8 @@ class VideoPlayer:
         self.cap = cv2.VideoCapture(self.video_path)
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        if self.train_detector is not None:
+            self.train_detector.fps = self.fps
         self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.delay = max(1, int(1000 / self.fps))
@@ -158,9 +182,19 @@ class VideoPlayer:
         self._last_metrics = metrics
 
         # Render pipeline
+        self._last_raw_frame = frame.copy()
         annotated = viz.draw_pose(frame, results)
         viz.draw_arm_rays(annotated, kp, self.detector.regions)
         viz.draw_annotations(annotated, self.detector.regions, self.detector.lines)
+
+        # Train detection
+        if self.train_detector is not None:
+            train_state, train_mad = self.train_detector.update(frame)
+            self._last_train_state = train_state
+            self._last_train_mad = train_mad
+            annotated = viz.draw_train_status(
+                annotated, train_state, train_mad, self.train_detector.events)
+
         annotated, status_bottom = viz.draw_status_overlay(
             annotated, self.detector.rules, active,
             self.detector.events, self.action_mapping)
@@ -217,6 +251,24 @@ class VideoPlayer:
             print(f"✅ 已保存 {len(self.detector.regions)} 个区域 + "
                   f"{len(self.detector.lines)} 条参考线 -> {self.annotations_file}")
 
+        elif key == ord('b') and self._paused and self._last_raw_frame is not None:
+            cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+            save_background(self.annotations_file, self._last_raw_frame, cur)
+            # Reload background info and create train detector on the fly
+            bg_path, track_roi_name = load_background_info(self.annotations_file)
+            if bg_path and track_roi_name and os.path.exists(bg_path):
+                track_roi = None
+                for r in self.detector.regions:
+                    if r['name'] == track_roi_name:
+                        track_roi = r['xywh']
+                        break
+                if track_roi is not None:
+                    self.train_detector = TrainDetector(
+                        bg_path, track_roi, fps=self.fps)
+                    self._last_train_state = None
+                    self._last_train_mad = 0.0
+                    print(f"列车检测已激活  track_roi={track_roi_name}")
+
         elif key == ord('d') and self._paused:
             self.detector.regions = remove_last_region(self.detector.regions)
 
@@ -228,6 +280,7 @@ class VideoPlayer:
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, self._trackbar_pos)
         ret, frame = self.cap.read()
         if ret:
+            self._last_raw_frame = frame.copy()
             results = self.model(frame, verbose=False, conf=self.model_conf)
             kp = results[0].keypoints if results[0].keypoints is not None else None
             active, _ = self.detector.update(kp)
@@ -235,6 +288,13 @@ class VideoPlayer:
             self._last_frame = viz.draw_pose(frame, results)
             viz.draw_arm_rays(self._last_frame, kp, self.detector.regions)
             viz.draw_annotations(self._last_frame, self.detector.regions, self.detector.lines)
+            if self.train_detector is not None:
+                train_state, train_mad = self.train_detector.update(frame)
+                self._last_train_state = train_state
+                self._last_train_mad = train_mad
+                self._last_frame = viz.draw_train_status(
+                    self._last_frame, train_state, train_mad,
+                    self.train_detector.events)
             self._last_frame, status_bottom = viz.draw_status_overlay(
                 self._last_frame, self.detector.rules,
                 active, self.detector.events, self.action_mapping)
@@ -259,6 +319,10 @@ class VideoPlayer:
                 align_right=True)
             paused_frame = viz.draw_action_metrics(
                 paused_frame, self._last_metrics, x=12, y=status_bottom + 6)
+            if self.train_detector is not None:
+                paused_frame = viz.draw_train_status(
+                    paused_frame, self._last_train_state,
+                    self._last_train_mad, self.train_detector.events)
             cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) if self.cap else 0
             viz.draw_frame_info(paused_frame, cur, self.total_frames, self.fps)
             cv2.imshow(self.window_name, paused_frame)
@@ -290,6 +354,7 @@ class VideoPlayer:
         print("  L    = 鼠标点击两点画参考线（沿列车）")
         print("  D    = 删除最后一个区域")
         print("  S    = 保存区域+参考线到 JSON 文件")
+        print("  B    = 保存当前帧为背景参考图（轨道空闲时）")
         print("  ----- 随时可用 -----")
         print("  Z    = 重置检测器，清空所有事件")
 
@@ -303,4 +368,6 @@ class VideoPlayer:
             self.detector.events, self.action_mapping, fps=self.fps)
         self._analysis = analyzer.analyze()
         print("\n" + analyzer.summary())
+        if self.train_detector is not None:
+            print("\n" + self.train_detector.summary())
         return viz.draw_analysis_result(frame, self._analysis)

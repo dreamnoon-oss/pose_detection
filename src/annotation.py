@@ -31,6 +31,28 @@ def load_annotations(json_path):
     return regions, lines
 
 
+def load_background_info(json_path):
+    """Load background image path and track ROI name from a JSON annotation file.
+
+    Returns:
+        ``(bg_image_path, track_roi_name)`` or ``(None, None)`` if not configured.
+    """
+    if not os.path.exists(json_path):
+        return None, None
+
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    bg = data.get("background")
+    if bg is None:
+        return None, None
+
+    data_dir = os.path.dirname(json_path)
+    bg_path = os.path.join(data_dir, bg["image"])
+    track_roi = data.get("track_roi")
+    return bg_path, track_roi
+
+
 def save_annotations(json_path, regions, lines, video_path, frame_idx,
                      width, height):
     """Write regions and lines to a JSON file."""
@@ -108,3 +130,44 @@ def remove_last_region(saved_regions):
         removed = saved_regions.pop()
         print(f"已删除 {removed['name']}，剩余 {len(saved_regions)} 个区域")
     return saved_regions
+
+
+def save_background(json_path, frame, frame_idx):
+    """Save the current raw frame as a background reference image.
+
+    The PNG is saved alongside the JSON file; a ``background`` key is added
+    (or updated) in the JSON pointing to the image file and capture frame.
+    If a ``track_roi`` field does not yet exist in the JSON, the first region
+    is automatically assigned as the track monitoring ROI.
+
+    Args:
+        json_path: path to the annotations JSON file.
+        frame: BGR numpy array (raw video frame, no overlays).
+        frame_idx: frame number where the background was captured.
+    """
+    import os
+
+    data_dir = os.path.dirname(json_path)
+    bg_name = os.path.splitext(os.path.basename(json_path))[0] + "_background.png"
+    bg_path = os.path.join(data_dir, bg_name)
+    cv2.imwrite(bg_path, frame)
+    print(f">>> 背景帧已保存: {bg_name} (帧 {frame_idx})")
+
+    data = {}
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+    data["background"] = {
+        "image": bg_name,
+        "frame": frame_idx,
+    }
+
+    # Auto-set track_roi to first region if not already set
+    if "track_roi" not in data and data.get("regions"):
+        data["track_roi"] = data["regions"][0]["name"]
+        print(f"    自动设置 track_roi = {data['track_roi']}")
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    print(f"    已更新 {os.path.basename(json_path)} 中的 background 字段")

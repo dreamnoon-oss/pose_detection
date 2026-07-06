@@ -342,6 +342,55 @@ def draw_pause_indicator(frame):
 
 
 # ---------------------------------------------------------------------------
+# Train arrival/departure status overlay (top-right)
+# ---------------------------------------------------------------------------
+
+def draw_train_status(frame, train_state, train_mad, train_events=None):
+    """Draw a compact train detection badge at the top-right of the frame.
+
+    Args:
+        frame: BGR image (modified in-place).
+        train_state: 'AWAY' | 'PRESENT' or None (not configured).
+        train_mad: current mean absolute diff value.
+        train_events: list of (frame, ts, event_type) from TrainDetector.
+    """
+    if train_state is None:
+        return frame
+
+    state_label = "轨道空闲" if train_state == 'AWAY' else "列车在场"
+    color = (80, 220, 80) if train_state == 'AWAY' else (80, 180, 255)
+
+    lines = [f"列车: {state_label}  MAD={train_mad:.1f}"]
+
+    # Show detected events so far
+    if train_events:
+        for _f, ts, etype in train_events:
+            label = "到站" if etype == 'arrived' else "离站"
+            lines.append(f"  {label} @ {ts:.1f}s")
+
+    font_size = 13
+    row_h = 20
+    box_w = 260
+    box_h = len(lines) * row_h + 14
+    box_x = frame.shape[1] - box_w - 12
+    box_y = 12
+
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (box_x, box_y),
+                  (box_x + box_w, box_y + box_h), (20, 20, 20), -1)
+    cv2.rectangle(overlay, (box_x, box_y),
+                  (box_x + box_w, box_y + box_h), (60, 60, 60), 1)
+    cv2.addWeighted(overlay, 0.72, frame, 0.28, 0, frame)
+
+    for i, line in enumerate(lines):
+        y = box_y + 10 + i * row_h
+        line_color = color if i == 0 else (160, 160, 160)
+        frame = put_text_cn(frame, line, (box_x + 10, y), font_size, line_color)
+
+    return frame
+
+
+# ---------------------------------------------------------------------------
 # Debug: draw extended arm rays for pass_region rules
 # ---------------------------------------------------------------------------
 
