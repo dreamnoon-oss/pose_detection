@@ -42,6 +42,9 @@ class VideoPlayer:
         self._trackbar_pos = 0
         self._user_seeking = False
         self._analysis = None
+        self._last_active = {}
+        self._last_metrics = []
+        self._last_kp = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -144,14 +147,24 @@ class VideoPlayer:
 
         # Parallel detection
         active, new_events = self.detector.update(kp)
+        self._last_active = active
+        self._last_kp = kp
+
+        # Per-action real-time metrics
+        metrics = viz.compute_action_metrics(
+            kp, self.action_mapping, self.detector.rules,
+            self.detector.regions, self.detector.lines,
+            self.detector.detection_kwargs)
+        self._last_metrics = metrics
 
         # Render pipeline
         annotated = viz.draw_pose(frame, results)
         viz.draw_arm_rays(annotated, kp, self.detector.regions)
         viz.draw_annotations(annotated, self.detector.regions, self.detector.lines)
-        annotated = viz.draw_status_overlay(
+        annotated, status_bottom = viz.draw_status_overlay(
             annotated, self.detector.rules, active,
             self.detector.events, self.action_mapping)
+        annotated = viz.draw_action_metrics(annotated, metrics, y=status_bottom + 6)
 
         infer_ms = (time.time() - t0) * 1000
         self._last_frame = annotated.copy()
@@ -216,7 +229,22 @@ class VideoPlayer:
         ret, frame = self.cap.read()
         if ret:
             results = self.model(frame, verbose=False, conf=self.model_conf)
+            kp = results[0].keypoints if results[0].keypoints is not None else None
+            active, _ = self.detector.update(kp)
+            self._last_active = active
             self._last_frame = viz.draw_pose(frame, results)
+            viz.draw_arm_rays(self._last_frame, kp, self.detector.regions)
+            viz.draw_annotations(self._last_frame, self.detector.regions, self.detector.lines)
+            self._last_frame, status_bottom = viz.draw_status_overlay(
+                self._last_frame, self.detector.rules,
+                active, self.detector.events, self.action_mapping)
+            metrics = viz.compute_action_metrics(
+                kp, self.action_mapping, self.detector.rules,
+                self.detector.regions, self.detector.lines,
+                self.detector.detection_kwargs)
+            self._last_metrics = metrics
+            self._last_frame = viz.draw_action_metrics(
+                self._last_frame, metrics, y=status_bottom + 6)
             cv2.imshow(self.window_name, self._last_frame)
 
     def _draw_paused_frame(self):
@@ -225,6 +253,14 @@ class VideoPlayer:
             paused_frame = self._last_frame.copy()
             viz.draw_annotations(paused_frame, self.detector.regions, self.detector.lines)
             viz.draw_pause_indicator(paused_frame)
+            paused_frame, status_bottom = viz.draw_status_overlay(
+                paused_frame, self.detector.rules,
+                self._last_active, self.detector.events, self.action_mapping,
+                align_right=True)
+            paused_frame = viz.draw_action_metrics(
+                paused_frame, self._last_metrics, x=12, y=status_bottom + 6)
+            cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) if self.cap else 0
+            viz.draw_frame_info(paused_frame, cur, self.total_frames, self.fps)
             cv2.imshow(self.window_name, paused_frame)
 
     def _on_trackbar(self, pos):

@@ -127,8 +127,8 @@ start = st.sidebar.button("▶ 开始检测", use_container_width=True, type="pr
 # Scenario configs
 # ---------------------------------------------------------------------------
 SCENARIO_CONFIGS = {
-    "上体场2": {
-        "annotations_file": str(Path(DATA_DIR) / "regions_shangtichang2.json"),
+    "上体场": {
+        "annotations_file": str(Path(DATA_DIR) / "regions_shangtichang.json"),
         "rules": [
             {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1"},
             {"name": "rule_B", "type": "parallel_line", "ref_line": "line_2", "allow_elbow": True},
@@ -141,8 +141,8 @@ SCENARIO_CONFIGS = {
             {"action": "动作4 — 确认指示灯", "rule": "rule_C", "occurrence": 1},
         ],
     },
-    "宝山1": {
-        "annotations_file": str(Path(DATA_DIR) / "regions_baoshan1.json"),
+    "宝山": {
+        "annotations_file": str(Path(DATA_DIR) / "regions_baoshan.json"),
         "rules": [
             {"name": "rule_A", "type": "pointing_with_line",
              "target_region": "region_1", "ref_line": "line_1"},

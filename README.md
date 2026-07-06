@@ -31,8 +31,8 @@ pose_detection/
 │   ├── annotation.py      # 标注工具（区域框选、参考线）
 │   └── player.py          # 交互式视频播放器
 ├── scripts/
-│   ├── run_shangtichang2.py
-│   └── run_baoshan1.py
+│   ├── run_shangtichang.py
+│   └── run_baoshan.py
 ├── data/                   # 标注数据 (JSON)
 ├── models/                 # 模型文件
 └── output/                 # 输出视频
@@ -60,7 +60,7 @@ pose_detection/
 | 冷却期 | 45 帧 | 事件触发后同规则暂停检测 |
 | 最小手臂长度 | 30px | 过滤无效检测 |
 
-## 动作序列（上体场2）
+## 动作序列（上体场）
 
 | 动作 | 规则 | 检测类型 | 目标 |
 |------|------|------|------|
@@ -68,6 +68,22 @@ pose_detection/
 | 动作2 | rule_B (第1次) | parallel_line | line_2（肘部回退+躯干夹角） |
 | 动作3 | rule_A (第2次) | parallel_line | line_1 |
 | 动作4 | rule_C (第1次) | pass_region | region_1（延长射线） |
+
+## 实时指标面板
+
+播放/暂停时左上角显示并行检测面板，下方额外显示每个动作的实时指标：
+
+- **parallel_line 规则**：显示肩→腕（或肩→肘）与参考线的当前夹角
+- **pointing 规则**：显示手臂方向与区域的最小夹角
+- **pass_region 规则**：显示"穿过"或"未穿过"
+
+暂停后面板自动切换到右上角，避免与"PAUSED"文字重叠。每条规则独立计算，不受检测阈值限制，始终可见。
+
+### 可视化增强
+
+- **手臂线段**：肩→肘→腕以加粗青色（左臂）/ 洋红色（右臂）绘制，置信度阈值降至 0.3
+- **延长射线**：绿色 = 命中区域，红色 = 未命中
+- 暂停和拖拽进度条时完整渲染所有面板
 
 ## 快速开始
 
@@ -87,8 +103,8 @@ pip install -r requirements.txt
 ### 运行
 
 ```bash
-python scripts/run_shangtichang2.py   # 上体场2（主版本）
-python scripts/run_baoshan1.py        # 宝山1（角度法）
+python scripts/run_shangtichang.py   # 上体场（主版本）
+python scripts/run_baoshan.py        # 宝山（角度法）
 ```
 
 ## 操作说明

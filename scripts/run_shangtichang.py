@@ -1,4 +1,4 @@
-"""Entry point: Baoshan 1 video — angle-based pointing detection."""
+"""Entry point: Shangtichang video — parallel-line + pass-region detection."""
 
 import sys
 from pathlib import Path
@@ -14,40 +14,33 @@ from src.player import VideoPlayer
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-VIDEO_PATH = r"\\10.151.2.205\共享文件2\司机行为规范样本采样\短视频\宝山1.mp4"
+VIDEO_PATH = r"\\10.151.2.205\共享文件2\司机行为规范样本采样\短视频\上体场2.mp4"
 MODEL_PATH = str(Path(MODEL_DIR) / "yolo26x-pose.pt")
-ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_baoshan1.json")
+ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_shangtichang.json")
 
 # ---------------------------------------------------------------------------
 # Detection rules (unique conditions; each runs independently)
 # ---------------------------------------------------------------------------
 DETECTION_RULES = [
-    {"name": "rule_A", "type": "pointing_with_line",
-     "target_region": "region_1", "ref_line": "line_1"},
-    {"name": "rule_B", "type": "pointing",
-     "target_region": "region_2"},
-    {"name": "rule_C", "type": "pointing",
-     "target_region": "region_3"},
-    {"name": "rule_D", "type": "pointing_with_line",
-     "target_region": "region_4", "ref_line": "line_1"},
+    {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1"},
+    {"name": "rule_B", "type": "parallel_line", "ref_line": "line_2", "allow_elbow": True},
+    {"name": "rule_C", "type": "pass_region", "target_region": "region_1"},
 ]
 
 # ---------------------------------------------------------------------------
 # Action mapping: which rule occurrence maps to which action
 # ---------------------------------------------------------------------------
 ACTION_MAPPING = [
-    {"action": "动作1", "rule": "rule_A", "occurrence": 1},  # region_1 + line_1
-    {"action": "动作2", "rule": "rule_B", "occurrence": 1},  # region_2
-    {"action": "动作3", "rule": "rule_A", "occurrence": 2},  # region_1 + line_1（同规则，第2次出现）
-    {"action": "动作4", "rule": "rule_C", "occurrence": 1},  # region_3
-    {"action": "动作5", "rule": "rule_D", "occurrence": 1},  # region_4 + line_1
+    {"action": "动作1", "rule": "rule_A", "occurrence": 1},  # 手指呼唤
+    {"action": "动作2", "rule": "rule_B", "occurrence": 1},  # 手动关门
+    {"action": "动作3", "rule": "rule_A", "occurrence": 2},  # 确认夹缝 (同规则，第2次出现)
+    {"action": "动作4", "rule": "rule_C", "occurrence": 1},  # 确认站台指示灯
 ]
 
 DETECTION_KWARGS = {
-    "angle_threshold": 30,
-    "line_angle_threshold": 40,
-    "loose_angle_threshold": 55,
+    "angle_threshold": 40,
     "min_arm_len": 30,
+    "min_arm_torso_angle": 45,  # 手臂 vs 躯干夹角需 >45°，防止未抬臂的误触发
 }
 
 # ---------------------------------------------------------------------------
@@ -67,6 +60,6 @@ if __name__ == "__main__":
         model, VIDEO_PATH, detector, ACTION_MAPPING,
         annotations_file=ANNOTATIONS_FILE,
         output_dir=str(Path(OUTPUT_DIR)),
-        output_name="pose_output_baoshan1.mp4",
+        output_name="pose_output_shangtichang.mp4",
     )
     player.run()

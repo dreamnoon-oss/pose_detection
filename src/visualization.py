@@ -152,8 +152,9 @@ def _map_actions_from_events(action_mapping, events):
     return results
 
 
-def draw_status_overlay(frame, rules, active, events, action_mapping=None):
-    """Draw a parallel-detection dashboard (top-left).
+def draw_status_overlay(frame, rules, active, events, action_mapping=None, *,
+                         align_right=False):
+    """Draw a parallel-detection dashboard.
 
     Shows every rule's hold progress, completed event count, and (optionally)
     action-mapping status with found/missing indicators.
@@ -164,6 +165,7 @@ def draw_status_overlay(frame, rules, active, events, action_mapping=None):
         active: dict of rule_name → hit-info for currently-accumulating rules.
         events: list of all completed event dicts so far.
         action_mapping: optional list of ``{action, rule, occurrence}``.
+        align_right: if True, place panel at top-right instead of top-left.
     """
     action_mapping = action_mapping or []
     event_counts = {}
@@ -185,7 +187,8 @@ def draw_status_overlay(frame, rules, active, events, action_mapping=None):
     n_actions = len(action_status)
     action_section_h = (sep_h + n_actions * action_row_h + 6) if n_actions else 0
     panel_h = title_h + n_rules * rule_row_h + action_section_h + 10
-    panel_x, panel_y = 12, 12
+    panel_x = (frame.shape[1] - panel_w - 12) if align_right else 12
+    panel_y = 12
 
     # Background
     overlay = frame.copy()
@@ -267,7 +270,7 @@ def draw_status_overlay(frame, rules, active, events, action_mapping=None):
             frame = put_text_cn(frame, text, (x0 + 18, row_y + 1),
                                 action_font, color)
 
-    return frame
+    return frame, panel_y + panel_h
 
 
 def draw_analysis_result(frame, analysis):
@@ -343,7 +346,10 @@ def draw_pause_indicator(frame):
 # ---------------------------------------------------------------------------
 
 def draw_arm_rays(frame, keypoints_obj, regions):
-    """Draw shoulder→extended-wrist rays. Green = hits region, Red = misses.
+    """Draw shoulder→elbow→wrist segments and shoulder→extended-wrist rays.
+
+    Arm segments (shoulder→elbow→wrist) are drawn in thick cyan/magenta.
+    Extended rays are green if they hit a region, red otherwise.
 
     Args:
         frame: BGR image (modified in-place).
@@ -359,7 +365,24 @@ def draw_arm_rays(frame, keypoints_obj, regions):
         xy = kps.xy[0].cpu().numpy()
         conf = kps.conf[0].cpu().numpy()
 
-        for shoulder_id, wrist_id, _elbow_id, side in [(5, 9, 7, "L"), (6, 10, 8, "R")]:
+        for shoulder_id, wrist_id, elbow_id, side in [(5, 9, 7, "L"), (6, 10, 8, "R")]:
+            side_color = (255, 255, 0) if side == "L" else (255, 0, 255)  # cyan L, magenta R
+
+            # Draw shoulder→elbow segment (thick, always when both visible)
+            if conf[shoulder_id] > 0.3 and conf[elbow_id] > 0.3:
+                s_pt = (int(xy[shoulder_id][0]), int(xy[shoulder_id][1]))
+                e_pt = (int(xy[elbow_id][0]), int(xy[elbow_id][1]))
+                cv2.line(frame, s_pt, e_pt, side_color, 3, cv2.LINE_AA)
+                cv2.circle(frame, e_pt, 5, side_color, -1, cv2.LINE_AA)
+
+            # Draw elbow→wrist segment
+            if conf[elbow_id] > 0.3 and conf[wrist_id] > 0.3:
+                e_pt = (int(xy[elbow_id][0]), int(xy[elbow_id][1]))
+                w_pt = (int(xy[wrist_id][0]), int(xy[wrist_id][1]))
+                cv2.line(frame, e_pt, w_pt, side_color, 3, cv2.LINE_AA)
+                cv2.circle(frame, w_pt, 5, side_color, -1, cv2.LINE_AA)
+
+            # Extended ray (shoulder→wrist→extended, for region hit testing)
             if conf[shoulder_id] <= 0.5 or conf[wrist_id] <= 0.5:
                 continue
 
@@ -384,14 +407,12 @@ def draw_arm_rays(frame, keypoints_obj, regions):
                     ((rx, ry), (rx, ry + rh)),
                     ((rx + rw, ry), (rx + rw, ry + rh)),
                 ]
-                # Check endpoint in rect
                 if rx <= ex <= rx + rw and ry <= ey <= ry + rh:
                     hit = True
                     break
                 if rx <= sx <= rx + rw and ry <= sy <= ry + rh:
                     hit = True
                     break
-                # Check segment intersection
                 for e1, e2 in edges:
                     if _segments_cross((sx, sy), (ex, ey), e1, e2):
                         hit = True
@@ -400,11 +421,9 @@ def draw_arm_rays(frame, keypoints_obj, regions):
                     break
 
             color = (0, 255, 0) if hit else (0, 0, 255)
-            # Draw the full extended line
             pt1 = (int(sx), int(sy))
             pt2 = (int(ex), int(ey))
             cv2.line(frame, pt1, pt2, color, 2, cv2.LINE_AA)
-            # Draw small circle at wrist and extended tip
             cv2.circle(frame, (int(wx), int(wy)), 4, color, -1)
             cv2.circle(frame, (int(ex), int(ey)), 4, color, -1)
 
@@ -421,3 +440,216 @@ def _segments_cross(p1, p2, p3, p4):
        ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)):
         return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Real-time per-action metric display
+# ---------------------------------------------------------------------------
+
+def compute_action_metrics(keypoints_obj, action_mapping, rules, regions, lines,
+                           detection_kwargs):
+    """Compute the raw metric for each action from the current frame.
+
+    Iterates over all detected persons and both arms, returning the best
+    (closest) metric per action regardless of detection thresholds.
+
+    Returns a list of dicts: ``{action, metric_type, value, side, segment}``
+    """
+    import math
+    from .geometry import angle_between, min_angle_to_rect
+
+    results = []
+    if keypoints_obj is None:
+        for m in action_mapping:
+            results.append({'action': m['action'], 'metric_type': 'none', 'value': None})
+        return results
+
+    rule_lookup = {r['name']: r for r in rules}
+    region_lookup = {r['name']: r['xywh'] for r in regions}
+    line_lookup = {ln['name']: ln['pts'] for ln in lines}
+    kw = detection_kwargs or {}
+
+    for mapping in action_mapping:
+        rule = rule_lookup.get(mapping['rule'])
+        if rule is None:
+            results.append({'action': mapping['action'], 'metric_type': 'none', 'value': None})
+            continue
+
+        rtype = rule['type']
+        best = None  # (value, side, segment_label)
+
+        for xy, conf in _iter_persons_metric(keypoints_obj):
+            for shoulder_id, wrist_id, elbow_id, side in [(5, 9, 7, 'L'), (6, 10, 8, 'R')]:
+                if conf[shoulder_id] <= CONF_THRESHOLD:
+                    continue
+
+                shoulder = (float(xy[shoulder_id][0]), float(xy[shoulder_id][1]))
+
+                if rtype == 'parallel_line':
+                    line_pts = line_lookup.get(rule.get('ref_line', ''))
+                    if line_pts is None:
+                        continue
+                    line_dir = (line_pts[1][0] - line_pts[0][0],
+                                line_pts[1][1] - line_pts[0][1])
+
+                    allow_elbow = rule.get('allow_elbow', False)
+                    far_pt = segment_label = None
+
+                    if conf[wrist_id] > CONF_THRESHOLD:
+                        far_pt = (float(xy[wrist_id][0]), float(xy[wrist_id][1]))
+                        segment_label = '肩腕'
+                    elif allow_elbow and conf[elbow_id] > CONF_THRESHOLD:
+                        far_pt = (float(xy[elbow_id][0]), float(xy[elbow_id][1]))
+                        segment_label = '肩肘'
+
+                    if far_pt is None:
+                        continue
+                    arm_dir = (far_pt[0] - shoulder[0], far_pt[1] - shoulder[1])
+                    if math.hypot(*arm_dir) <= kw.get('min_arm_len', 30):
+                        continue
+                    ang = angle_between(arm_dir, line_dir)
+                    if best is None or ang < best[0]:
+                        best = (ang, side, segment_label)
+
+                elif rtype == 'pointing' or rtype == 'pointing_with_line':
+                    region_xywh = region_lookup.get(rule.get('target_region', ''))
+                    if region_xywh is None:
+                        continue
+                    if conf[wrist_id] <= CONF_THRESHOLD:
+                        continue
+                    wrist = (float(xy[wrist_id][0]), float(xy[wrist_id][1]))
+                    arm_dir = (wrist[0] - shoulder[0], wrist[1] - shoulder[1])
+                    if math.hypot(*arm_dir) <= kw.get('min_arm_len', 30):
+                        continue
+
+                    if rtype == 'pointing_with_line':
+                        line_pts = line_lookup.get(rule.get('ref_line', ''))
+                        if line_pts is not None:
+                            line_dir = (line_pts[1][0] - line_pts[0][0],
+                                        line_pts[1][1] - line_pts[0][1])
+                            ang_line = angle_between(arm_dir, line_dir)
+                        else:
+                            ang_line = 180
+                        ang_rect = min_angle_to_rect(wrist, arm_dir, region_xywh)
+                        # Show the line angle as primary metric
+                        if best is None or ang_line < best[0]:
+                            best = (ang_line, side, '腕')
+                    else:  # pointing
+                        ang = min_angle_to_rect(wrist, arm_dir, region_xywh)
+                        if best is None or ang < best[0]:
+                            best = (ang, side, '腕')
+
+                elif rtype == 'pass_region':
+                    region_xywh = region_lookup.get(rule.get('target_region', ''))
+                    if region_xywh is None:
+                        continue
+                    if conf[wrist_id] <= CONF_THRESHOLD:
+                        continue
+                    rx, ry, rw, rh = region_xywh
+                    wrist = (float(xy[wrist_id][0]), float(xy[wrist_id][1]))
+                    arm_vec = (wrist[0] - shoulder[0], wrist[1] - shoulder[1])
+                    arm_len = math.hypot(*arm_vec)
+                    if arm_len <= kw.get('min_arm_len', 30):
+                        continue
+                    if kw.get('extend_ray', True):
+                        ex = wrist[0] + arm_vec[0] / arm_len * arm_len * 6.0
+                        ey = wrist[1] + arm_vec[1] / arm_len * arm_len * 6.0
+                        far = (ex, ey)
+                    else:
+                        far = wrist
+                    hit = (rx <= shoulder[0] <= rx + rw and ry <= shoulder[1] <= ry + rh) or \
+                          (rx <= far[0] <= rx + rw and ry <= far[1] <= ry + rh)
+                    if not hit:
+                        edges = [((rx, ry), (rx + rw, ry)),
+                                 ((rx, ry + rh), (rx + rw, ry + rh)),
+                                 ((rx, ry), (rx, ry + rh)),
+                                 ((rx + rw, ry), (rx + rw, ry + rh))]
+                        for e1, e2 in edges:
+                            if _segments_cross(shoulder, far, e1, e2):
+                                hit = True
+                                break
+                    # 0 = hit, 1 = miss (so lower is better)
+                    val = 0.0 if hit else 1.0
+                    if best is None or val < best[0]:
+                        best = (val, side, '腕')
+
+        results.append({
+            'action': mapping['action'],
+            'metric_type': rtype,
+            'value': best[0] if best else None,
+            'side': best[1] if best else None,
+            'segment': best[2] if best else None,
+        })
+
+    return results
+
+
+def draw_action_metrics(frame, metrics, *, x=None, y=None):
+    """Draw per-action real-time metrics on the left side, below the main panel.
+
+    Args:
+        frame: BGR image (modified in-place).
+        metrics: list from ``compute_action_metrics()``.
+        x, y: top-left position. Defaults to below the main detection panel.
+    """
+    if not metrics:
+        return frame
+
+    font_size = 14
+    row_h = 22
+    pad = 12
+    panel_w = 300
+
+    n = len(metrics)
+    panel_h = n * row_h + pad * 2
+    if x is None:
+        x = 12
+    if y is None:
+        y = 12 + 34 + 3 * 36 + (4 + 4 * 22 + 6) + 22  # below main overlay
+
+    # Background
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x, y), (x + panel_w, y + panel_h), (20, 20, 20), -1)
+    cv2.rectangle(overlay, (x, y), (x + panel_w, y + panel_h), (60, 60, 60), 1)
+    cv2.addWeighted(overlay, 0.72, frame, 0.28, 0, frame)
+
+    for i, m in enumerate(metrics):
+        row_y = y + pad + i * row_h
+        action_label = m['action']
+        val = m['value']
+
+        if val is None:
+            text = f"{action_label}: --"
+            color = (100, 100, 100)
+        elif m['metric_type'] == 'pass_region':
+            if val == 0.0:
+                text = f"{action_label}: 穿过"
+                color = (80, 220, 80)
+            else:
+                text = f"{action_label}: 未穿过"
+                color = (200, 120, 80)
+        else:
+            seg = m.get('segment', '')
+            side = m.get('side', '')
+            text = f"{action_label}: {val:.0f}deg ({side}臂{seg})" if side else f"{action_label}: {val:.0f}deg"
+            # Color: green if close to 0 (parallel), yellow if medium, red if far
+            if val <= 30:
+                color = (80, 220, 80)
+            elif val <= 55:
+                color = (80, 200, 255)
+            else:
+                color = (200, 140, 80)
+
+        frame = put_text_cn(frame, text, (x + pad, row_y),
+                            font_size, color)
+
+    return frame
+
+
+def _iter_persons_metric(keypoints_obj):
+    """Yield ``(xy, conf)`` numpy arrays for each detected person."""
+    for person_idx in range(len(keypoints_obj)):
+        kps = keypoints_obj[person_idx]
+        xy = kps.xy[0].cpu().numpy()
+        conf = kps.conf[0].cpu().numpy()
+        yield xy, conf
