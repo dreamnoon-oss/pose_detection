@@ -14,7 +14,7 @@ from src.player import VideoPlayer
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-VIDEO_PATH = r"\\10.151.2.205\共享文件2\司机行为规范样本采样\短视频\上体场2.mp4"
+VIDEO_PATH = r"C:\Users\x'j'h'y'y'd's\Desktop\01.mp4"
 MODEL_PATH = str(Path(MODEL_DIR) / "yolo26x-pose.pt")
 ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_shangtichang.json")
 
@@ -31,10 +31,10 @@ DETECTION_RULES = [
 # Action mapping: which rule occurrence maps to which action
 # ---------------------------------------------------------------------------
 ACTION_MAPPING = [
-    {"action": "动作1", "rule": "rule_A", "occurrence": 1},  # 手指呼唤
-    {"action": "动作2", "rule": "rule_B", "occurrence": 1},  # 手动关门
-    {"action": "动作3", "rule": "rule_A", "occurrence": 2},  # 确认夹缝 (同规则，第2次出现)
-    {"action": "动作4", "rule": "rule_C", "occurrence": 1},  # 确认站台指示灯
+    {"action": "Act1 Call", "rule": "rule_A", "occurrence": 1},
+    {"action": "Act2 CloseDoor", "rule": "rule_B", "occurrence": 1},
+    {"action": "Act3 CheckGap", "rule": "rule_A", "occurrence": 2},
+    {"action": "Act4 CheckLight", "rule": "rule_C", "occurrence": 1},
 ]
 
 DETECTION_KWARGS = {
@@ -61,6 +61,6 @@ if __name__ == "__main__":
         annotations_file=ANNOTATIONS_FILE,
         output_dir=str(Path(OUTPUT_DIR)),
         output_name="pose_output_shangtichang.mp4",
-        imgsz=480, frame_skip=1,
+        imgsz=640, frame_skip=0,
     )
     player.run()

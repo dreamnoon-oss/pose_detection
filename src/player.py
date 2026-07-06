@@ -170,7 +170,7 @@ class VideoPlayer:
 
         t0 = time.time()
 
-        # Pose detection (with frame skipping)
+        # Pose detection
         cur_frame = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
         if (self.frame_skip <= 0 or cur_frame % (self.frame_skip + 1) == 0
                 or self._last_results is None):
@@ -334,12 +334,6 @@ class VideoPlayer:
             viz.draw_annotations(paused_frame, self.detector.regions, self.detector.lines,
                                  self._track_roi_name)
             viz.draw_pause_indicator(paused_frame)
-            paused_frame, status_bottom = viz.draw_status_overlay(
-                paused_frame, self.detector.rules,
-                self._last_active, self.detector.events, self.action_mapping,
-                align_right=True)
-            paused_frame = viz.draw_action_metrics(
-                paused_frame, self._last_metrics, x=12, y=status_bottom + 6)
             cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) if self.cap else 0
             viz.draw_frame_info(paused_frame, cur, self.total_frames, self.fps)
             cv2.imshow(self.window_name, paused_frame)

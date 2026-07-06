@@ -71,32 +71,32 @@ class SequenceAnalyzer:
         result = self.analyze()
         lines = []
         lines.append("=" * 50)
-        lines.append("  动作序列分析")
+        lines.append("  Sequence Analysis")
         lines.append("=" * 50)
 
         for i, a in enumerate(result['actions'], 1):
             if a['found']:
-                side_label = "左臂" if a['side'] == 'L' else \
-                             "右臂" if a['side'] == 'R' else "?"
+                side_label = "L" if a['side'] == 'L' else \
+                             "R" if a['side'] == 'R' else "?"
                 ts = a['timestamp']
                 lines.append(
-                    f"  [OK] {a['action']:<10s}  "
-                    f"@ {ts:.1f}s (帧 {a['frame']})  "
-                    f"{side_label}  {a['angle']:.0f}°"
+                    f"  [OK] {a['action']:<14s}  "
+                    f"@ {ts:.1f}s (f{a['frame']})  "
+                    f"{side_label}  {a['angle']:.0f}deg"
                 )
             else:
-                lines.append(f"  [X] {a['action']:<10s}  未检测到")
+                lines.append(f"  [X] {a['action']:<14s}  Not Detected")
 
         lines.append("-" * 50)
         if result['all_found']:
             if result['order_valid']:
-                lines.append("  结论: 全部完成，顺序正确 [OK]")
+                lines.append("  Result: All Done, Order OK")
             else:
-                lines.append("  结论: 全部完成，但顺序异常 [X]")
+                lines.append("  Result: All Done, Order Wrong")
         else:
             missing = [a['action'] for a in result['actions'] if not a['found']]
-            lines.append(f"  结论: 缺失动作 — {', '.join(missing)}")
+            lines.append(f"  Result: Missing — {', '.join(missing)}")
 
-        lines.append(f"  共检测到 {result['total_events']} 个事件")
+        lines.append(f"  Total Events: {result['total_events']}")
         lines.append("=" * 50)
         return "\n".join(lines)

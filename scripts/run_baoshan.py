@@ -36,11 +36,11 @@ DETECTION_RULES = [
 # Action mapping: which rule occurrence maps to which action
 # ---------------------------------------------------------------------------
 ACTION_MAPPING = [
-    {"action": "动作1", "rule": "rule_A", "occurrence": 1},  # region_1 + line_1
-    {"action": "动作2", "rule": "rule_B", "occurrence": 1},  # region_2
-    {"action": "动作3", "rule": "rule_A", "occurrence": 2},  # region_1 + line_1 (同规则，第2次出现)
-    {"action": "动作4", "rule": "rule_C", "occurrence": 1},  # region_3
-    {"action": "动作5", "rule": "rule_D", "occurrence": 1},  # region_4 + line_1
+    {"action": "Act1 PointFwd", "rule": "rule_A", "occurrence": 1},
+    {"action": "Act2 CheckR2", "rule": "rule_B", "occurrence": 1},
+    {"action": "Act3 PointFwd", "rule": "rule_A", "occurrence": 2},
+    {"action": "Act4 CheckR3", "rule": "rule_C", "occurrence": 1},
+    {"action": "Act5 CheckR4", "rule": "rule_D", "occurrence": 1},
 ]
 
 DETECTION_KWARGS = {
@@ -68,6 +68,6 @@ if __name__ == "__main__":
         annotations_file=ANNOTATIONS_FILE,
         output_dir=str(Path(OUTPUT_DIR)),
         output_name="pose_output_baoshan.mp4",
-        imgsz=480, frame_skip=1,
+        imgsz=640, frame_skip=0,
     )
     player.run()

@@ -28,7 +28,6 @@ from src.annotation import load_annotations
 from src.visualization import (
     draw_pose, draw_annotations, draw_frame_info,
     draw_arm_rays, draw_status_overlay, draw_analysis_result,
-    put_text_cn,
 )
 from src.config import SHOW_KEYPOINTS, SKELETON
 
@@ -135,10 +134,10 @@ SCENARIO_CONFIGS = {
             {"name": "rule_C", "type": "pass_region", "target_region": "region_1"},
         ],
         "action_mapping": [
-            {"action": "动作1 — 手指呼唤", "rule": "rule_A", "occurrence": 1},
-            {"action": "动作2 — 手动关门", "rule": "rule_B", "occurrence": 1},
-            {"action": "动作3 — 确认夹缝", "rule": "rule_A", "occurrence": 2},
-            {"action": "动作4 — 确认指示灯", "rule": "rule_C", "occurrence": 1},
+            {"action": "Act1 Call", "rule": "rule_A", "occurrence": 1},
+            {"action": "Act2 CloseDoor", "rule": "rule_B", "occurrence": 1},
+            {"action": "Act3 CheckGap", "rule": "rule_A", "occurrence": 2},
+            {"action": "Act4 CheckLight", "rule": "rule_C", "occurrence": 1},
         ],
     },
     "宝山": {
@@ -152,11 +151,11 @@ SCENARIO_CONFIGS = {
              "target_region": "region_4", "ref_line": "line_1"},
         ],
         "action_mapping": [
-            {"action": "动作1 — 指向前方", "rule": "rule_A", "occurrence": 1},
-            {"action": "动作2 — 确认区域2", "rule": "rule_B", "occurrence": 1},
-            {"action": "动作3 — 再次指向前方", "rule": "rule_A", "occurrence": 2},
-            {"action": "动作4 — 确认区域3", "rule": "rule_C", "occurrence": 1},
-            {"action": "动作5 — 确认区域4", "rule": "rule_D", "occurrence": 1},
+            {"action": "Act1 PointFwd", "rule": "rule_A", "occurrence": 1},
+            {"action": "Act2 CheckR2", "rule": "rule_B", "occurrence": 1},
+            {"action": "Act3 PointFwd", "rule": "rule_A", "occurrence": 2},
+            {"action": "Act4 CheckR3", "rule": "rule_C", "occurrence": 1},
+            {"action": "Act5 CheckR4", "rule": "rule_D", "occurrence": 1},
         ],
     },
 }
