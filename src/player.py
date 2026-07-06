@@ -170,13 +170,14 @@ class VideoPlayer:
 
         # Pose detection (with frame skipping)
         cur_frame = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-        if self.frame_skip <= 0 or cur_frame % (self.frame_skip + 1) == 0:
+        if (self.frame_skip <= 0 or cur_frame % (self.frame_skip + 1) == 0
+                or self._last_results is None):
             results = self.model(frame, verbose=False, conf=self.model_conf,
                                  imgsz=self.imgsz, half=self.half)
             self._last_results = results
         else:
             results = self._last_results
-        kp = results[0].keypoints if results[0].keypoints is not None else None
+        kp = results[0].keypoints if (results and results[0].keypoints is not None) else None
 
         # Parallel detection
         active, new_events = self.detector.update(kp)
