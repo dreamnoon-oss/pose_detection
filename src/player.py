@@ -52,19 +52,15 @@ class VideoPlayer:
 
         # Train detector (optional — enabled when background + track_roi exist)
         self.train_detector = None
-        bg_path, track_roi_name = load_background_info(annotations_file)
-        if bg_path and track_roi_name and os.path.exists(bg_path):
-            # Look up the ROI by name
-            track_roi = None
-            for r in detector.regions:
-                if r['name'] == track_roi_name:
-                    track_roi = r['xywh']
-                    break
+        _bg_path, _track_name = load_background_info(annotations_file)
+        self._track_roi_name = _track_name  # may be None
+        if _bg_path and _track_name and os.path.exists(_bg_path):
+            track_roi = self._lookup_roi(_track_name)
             if track_roi is not None:
                 self.train_detector = TrainDetector(
-                    bg_path, track_roi, fps=self.fps if hasattr(self, 'fps') else 1.0)
-                print(f"列车检测已启用  track_roi={track_roi_name}  "
-                      f"background={os.path.basename(bg_path)}")
+                    _bg_path, track_roi, fps=1.0)
+                print(f"列车检测已启用  track_roi={_track_name}  "
+                      f"background={os.path.basename(_bg_path)}")
         self._last_train_state = None
         self._last_train_mad = 0.0
 
@@ -185,7 +181,8 @@ class VideoPlayer:
         self._last_raw_frame = frame.copy()
         annotated = viz.draw_pose(frame, results)
         viz.draw_arm_rays(annotated, kp, self.detector.regions)
-        viz.draw_annotations(annotated, self.detector.regions, self.detector.lines)
+        viz.draw_annotations(annotated, self.detector.regions, self.detector.lines,
+                             self._track_roi_name)
 
         # Train detection
         if self.train_detector is not None:
@@ -251,23 +248,27 @@ class VideoPlayer:
             print(f"✅ 已保存 {len(self.detector.regions)} 个区域 + "
                   f"{len(self.detector.lines)} 条参考线 -> {self.annotations_file}")
 
+        elif key == ord('t') and self._paused:
+            # Cycle track_roi through existing regions
+            region_names = [r['name'] for r in self.detector.regions]
+            if not region_names:
+                print("请先用 R 框选轨道区域")
+            elif self._track_roi_name not in region_names:
+                self._track_roi_name = region_names[0]
+                print(f"track_roi -> {self._track_roi_name}")
+            else:
+                idx = region_names.index(self._track_roi_name)
+                self._track_roi_name = region_names[(idx + 1) % len(region_names)]
+                print(f"track_roi -> {self._track_roi_name}")
+
         elif key == ord('b') and self._paused and self._last_raw_frame is not None:
+            if self._track_roi_name is None and self.detector.regions:
+                self._track_roi_name = self.detector.regions[0]['name']
+                print(f"track_roi 自动设为 {self._track_roi_name}（按 T 切换）")
             cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-            save_background(self.annotations_file, self._last_raw_frame, cur)
-            # Reload background info and create train detector on the fly
-            bg_path, track_roi_name = load_background_info(self.annotations_file)
-            if bg_path and track_roi_name and os.path.exists(bg_path):
-                track_roi = None
-                for r in self.detector.regions:
-                    if r['name'] == track_roi_name:
-                        track_roi = r['xywh']
-                        break
-                if track_roi is not None:
-                    self.train_detector = TrainDetector(
-                        bg_path, track_roi, fps=self.fps)
-                    self._last_train_state = None
-                    self._last_train_mad = 0.0
-                    print(f"列车检测已激活  track_roi={track_roi_name}")
+            save_background(self.annotations_file, self._last_raw_frame, cur,
+                           self._track_roi_name)
+            self._activate_train_detector()
 
         elif key == ord('d') and self._paused:
             self.detector.regions = remove_last_region(self.detector.regions)
@@ -287,7 +288,8 @@ class VideoPlayer:
             self._last_active = active
             self._last_frame = viz.draw_pose(frame, results)
             viz.draw_arm_rays(self._last_frame, kp, self.detector.regions)
-            viz.draw_annotations(self._last_frame, self.detector.regions, self.detector.lines)
+            viz.draw_annotations(self._last_frame, self.detector.regions, self.detector.lines,
+                                 self._track_roi_name)
             if self.train_detector is not None:
                 train_state, train_mad = self.train_detector.update(frame)
                 self._last_train_state = train_state
@@ -311,7 +313,8 @@ class VideoPlayer:
         """Re-render the paused frame with annotation overlays."""
         if self._paused and self._last_frame is not None:
             paused_frame = self._last_frame.copy()
-            viz.draw_annotations(paused_frame, self.detector.regions, self.detector.lines)
+            viz.draw_annotations(paused_frame, self.detector.regions, self.detector.lines,
+                                 self._track_roi_name)
             viz.draw_pause_indicator(paused_frame)
             paused_frame, status_bottom = viz.draw_status_overlay(
                 paused_frame, self.detector.rules,
@@ -355,12 +358,34 @@ class VideoPlayer:
         print("  D    = 删除最后一个区域")
         print("  S    = 保存区域+参考线到 JSON 文件")
         print("  B    = 保存当前帧为背景参考图（轨道空闲时）")
+        print("  T    = 切换轨道监控区域（按 T 循环已有区域）")
         print("  ----- 随时可用 -----")
         print("  Z    = 重置检测器，清空所有事件")
 
     # ------------------------------------------------------------------
     # Internal: analysis
     # ------------------------------------------------------------------
+
+    def _lookup_roi(self, name):
+        """Return xywh tuple for a region by name, or None."""
+        for r in self.detector.regions:
+            if r['name'] == name:
+                return r['xywh']
+        return None
+
+    def _activate_train_detector(self):
+        """Create or recreate TrainDetector from current annotations."""
+        bg_path, track_name = load_background_info(self.annotations_file)
+        if not bg_path or not track_name or not os.path.exists(bg_path):
+            return
+        self._track_roi_name = track_name
+        roi = self._lookup_roi(track_name)
+        if roi is not None:
+            self.train_detector = TrainDetector(
+                bg_path, roi, fps=getattr(self, 'fps', 1.0))
+            self._last_train_state = None
+            self._last_train_mad = 0.0
+            print(f"列车检测已激活  track_roi={track_name}")
 
     def _run_analysis(self, frame):
         """Run sequence analysis on the recorded events and overlay results."""

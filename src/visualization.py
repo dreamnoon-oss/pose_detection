@@ -95,13 +95,20 @@ def draw_pose(frame, results):
 # Annotation overlay (regions + reference lines)
 # ---------------------------------------------------------------------------
 
-def draw_annotations(frame, regions, lines):
-    """Draw saved rectangular regions and reference lines on *frame* (in-place)."""
+def draw_annotations(frame, regions, lines, track_roi_name=None):
+    """Draw saved rectangular regions and reference lines on *frame* (in-place).
+
+    If *track_roi_name* matches a region's name, that region is drawn in blue
+    with a ``[轨道]`` label to distinguish it from other detection regions.
+    """
     for region in regions:
         x, y, w, h = region["xywh"]
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 255, 0), 2)
-        cv2.putText(frame, region["name"], (x, y - 8),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 0), 2)
+        is_track = (track_roi_name is not None and region["name"] == track_roi_name)
+        color = (255, 150, 0) if is_track else (255, 255, 0)  # blue vs cyan
+        label = f"{region['name']} [轨道]" if is_track else region["name"]
+        cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2 if is_track else 2)
+        cv2.putText(frame, label, (x, y - 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
 
     for ln in lines:
         pt1, pt2 = ln["pts"]

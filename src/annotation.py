@@ -132,18 +132,19 @@ def remove_last_region(saved_regions):
     return saved_regions
 
 
-def save_background(json_path, frame, frame_idx):
+def save_background(json_path, frame, frame_idx, track_roi_name=None):
     """Save the current raw frame as a background reference image.
 
     The PNG is saved alongside the JSON file; a ``background`` key is added
     (or updated) in the JSON pointing to the image file and capture frame.
-    If a ``track_roi`` field does not yet exist in the JSON, the first region
-    is automatically assigned as the track monitoring ROI.
 
     Args:
         json_path: path to the annotations JSON file.
         frame: BGR numpy array (raw video frame, no overlays).
         frame_idx: frame number where the background was captured.
+        track_roi_name: name of the region to use for train detection
+            (e.g. ``"region_2"``). If not given, defaults to the existing
+            ``track_roi`` in the JSON or the first region.
     """
     import os
 
@@ -163,11 +164,13 @@ def save_background(json_path, frame, frame_idx):
         "frame": frame_idx,
     }
 
-    # Auto-set track_roi to first region if not already set
-    if "track_roi" not in data and data.get("regions"):
+    if track_roi_name:
+        data["track_roi"] = track_roi_name
+    elif "track_roi" not in data and data.get("regions"):
         data["track_roi"] = data["regions"][0]["name"]
-        print(f"    自动设置 track_roi = {data['track_roi']}")
+        track_roi_name = data["track_roi"]
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
-    print(f"    已更新 {os.path.basename(json_path)} 中的 background 字段")
+    print(f"    track_roi = {track_roi_name or data.get('track_roi', '?')}")
+    print(f"    已更新 {os.path.basename(json_path)}")
