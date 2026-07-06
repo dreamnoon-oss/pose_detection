@@ -145,7 +145,9 @@ class VideoPlayer:
         cv2.destroyAllWindows()
         # Print train summary on manual exit too
         if self.train_detector is not None and self.train_detector.events:
-            print("\n" + self.train_detector.summary())
+            end_time = (self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.fps
+                        if self.fps else 0)
+            print("\n" + self.train_detector.summary(end_time))
         print(f"结果已保存到: {os.path.join(self.output_dir, self.output_name)}")
 
     # ------------------------------------------------------------------
@@ -406,5 +408,6 @@ class VideoPlayer:
         self._analysis = analyzer.analyze()
         print("\n" + analyzer.summary())
         if self.train_detector is not None:
-            print("\n" + self.train_detector.summary())
+            end_time = self.total_frames / self.fps if self.fps else 0
+            print("\n" + self.train_detector.summary(end_time))
         return viz.draw_analysis_result(frame, self._analysis)

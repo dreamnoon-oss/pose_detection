@@ -69,17 +69,32 @@ class TrainDetector:
 
         return self.state, self.mad
 
-    def summary(self):
-        """Return human-readable arrival/departure summary."""
+    def summary(self, current_time=None):
+        """Return human-readable arrival/departure summary.
+
+        If *current_time* is given (in seconds) and the train is still present,
+        the summary reports the train was still at the platform at exit.
+        """
         lines = ["=" * 50,
                  "  列车进出站检测",
                  "=" * 50]
         for _frame, ts, etype in self.events:
             label = "列车到站" if etype == 'arrived' else "列车离站"
             lines.append(f"  {label}: {ts:.1f}s")
+
         if not self.events:
-            lines.append("  未检测到列车进出站事件")
-        elif len(self.events) >= 2:
+            if self.state == 'PRESENT' and current_time is not None:
+                lines.append(f"  列车在场 (退出时 @ {current_time:.1f}s)")
+            else:
+                lines.append("  未检测到列车进出站事件")
+        elif self.events[-1][2] == 'arrived':
+            # Last event was arrival — train was still present at exit
+            if current_time is not None:
+                lines.append(f"  ---> 停靠时段: {self.events[-1][1]:.1f}s ~ "
+                             f"{current_time:.1f}s (退出时列车仍在站内)")
+            else:
+                lines.append("  ---> 列车仍在站内（未检测到离站）")
+        else:
             t_arrive = next(ts for f, ts, e in self.events if e == 'arrived')
             t_depart = next(ts for f, ts, e in self.events if e == 'departed')
             lines.append(f"  ---> 停靠时段: {t_arrive:.1f}s ~ {t_depart:.1f}s")
