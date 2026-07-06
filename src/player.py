@@ -184,13 +184,11 @@ class VideoPlayer:
         viz.draw_annotations(annotated, self.detector.regions, self.detector.lines,
                              self._track_roi_name)
 
-        # Train detection
+        # Train detection (background only, result printed at end)
         if self.train_detector is not None:
             train_state, train_mad = self.train_detector.update(frame)
             self._last_train_state = train_state
             self._last_train_mad = train_mad
-            annotated = viz.draw_train_status(
-                annotated, train_state, train_mad, self.train_detector.events)
 
         annotated, status_bottom = viz.draw_status_overlay(
             annotated, self.detector.rules, active,
@@ -296,9 +294,6 @@ class VideoPlayer:
                 train_state, train_mad = self.train_detector.update(frame)
                 self._last_train_state = train_state
                 self._last_train_mad = train_mad
-                self._last_frame = viz.draw_train_status(
-                    self._last_frame, train_state, train_mad,
-                    self.train_detector.events)
             self._last_frame, status_bottom = viz.draw_status_overlay(
                 self._last_frame, self.detector.rules,
                 active, self.detector.events, self.action_mapping)
@@ -324,10 +319,6 @@ class VideoPlayer:
                 align_right=True)
             paused_frame = viz.draw_action_metrics(
                 paused_frame, self._last_metrics, x=12, y=status_bottom + 6)
-            if self.train_detector is not None:
-                paused_frame = viz.draw_train_status(
-                    paused_frame, self._last_train_state,
-                    self._last_train_mad, self.train_detector.events)
             cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) if self.cap else 0
             viz.draw_frame_info(paused_frame, cur, self.total_frames, self.fps)
             cv2.imshow(self.window_name, paused_frame)
