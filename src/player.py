@@ -58,7 +58,13 @@ class VideoPlayer:
         self.train_detector = None
         _bg_path, _track_name = load_background_info(annotations_file)
         self._track_roi_name = _track_name  # may be None
-        if _bg_path and _track_name and os.path.exists(_bg_path):
+        # Fallback: scan loaded regions for one named "track"
+        if self._track_roi_name is None:
+            for r in self.detector.regions:
+                if r['name'] == 'track':
+                    self._track_roi_name = 'track'
+                    break
+        if _bg_path and self._track_roi_name and os.path.exists(_bg_path):
             track_roi = self._lookup_roi(_track_name)
             if track_roi is not None:
                 self.train_detector = TrainDetector(
@@ -263,19 +269,24 @@ class VideoPlayer:
                   f"{len(self.detector.lines)} 条参考线 -> {self.annotations_file}")
 
         elif key == ord('t') and self._paused and self._last_frame is not None:
-            # Remove existing track region if any
-            self.detector.regions = [r for r in self.detector.regions
-                                     if r['name'] != 'track']
-            print("请框选轨道区域（回车确认，Esc 取消）...")
-            self.detector.regions = select_roi(self.window_name, self._last_frame,
-                                               self.detector.regions)
-            # Rename the newly added region to "track"
-            if self.detector.regions:
-                last = self.detector.regions[-1]
-                if last['name'].startswith('region_'):
-                    last['name'] = 'track'
-                    self._track_roi_name = 'track'
-                    print(f">>> 轨道区域已更新: {last['xywh']}")
+            if self._track_roi_name is not None:
+                # Track ROI already exists — delete it
+                self.detector.regions = [r for r in self.detector.regions
+                                         if r['name'] != 'track']
+                self._track_roi_name = None
+                self.train_detector = None
+                print(">>> 轨道区域已删除")
+            else:
+                # No track ROI — select a new one
+                print("请框选轨道区域（回车确认，Esc 取消）...")
+                self.detector.regions = select_roi(self.window_name, self._last_frame,
+                                                   self.detector.regions)
+                if self.detector.regions:
+                    last = self.detector.regions[-1]
+                    if last['name'].startswith('region_'):
+                        last['name'] = 'track'
+                        self._track_roi_name = 'track'
+                        print(f">>> 轨道区域已更新: {last['xywh']}")
 
         elif key == ord('b') and self._paused and self._last_raw_frame is not None:
             if self._track_roi_name is None:
@@ -366,7 +377,7 @@ class VideoPlayer:
         print("  D    = 删除最后一个区域")
         print("  S    = 保存区域+参考线到 JSON 文件")
         print("  B    = 保存当前帧为背景参考图（轨道空闲时）")
-        print("  T    = 框选轨道监控区域（用于列车检测）")
+        print("  T    = 框选/删除轨道监控区域（用于列车检测）")
         print("  ----- 随时可用 -----")
         print("  Z    = 重置检测器，清空所有事件")
 

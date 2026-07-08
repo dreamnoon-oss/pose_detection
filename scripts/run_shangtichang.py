@@ -14,7 +14,7 @@ from src.player import VideoPlayer
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-VIDEO_PATH = r"C:\Users\x'j'h'y'y'd's\Desktop\01.mp4"
+VIDEO_PATH = r"D:\科研\申通技术中心\端头门司机行为分析\上体场2.mp4"
 MODEL_PATH = str(Path(MODEL_DIR) / "yolo26x-pose.pt")
 ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_shangtichang.json")
 
@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     detector = ParallelDetector(
         DETECTION_RULES, regions, lines,
-        hold_frames=15, frame_decay=2, cooldown_frames=45,
+        hold_frames=30, frame_decay=2, cooldown_frames=90,
         detection_kwargs=DETECTION_KWARGS,
     )
 

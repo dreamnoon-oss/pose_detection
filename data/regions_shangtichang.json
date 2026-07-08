@@ -50,5 +50,10 @@
         ]
       ]
     }
-  ]
+  ],
+  "background": {
+    "image": "regions_shangtichang_background.png",
+    "frame": 24
+  },
+  "track_roi": "track"
 }

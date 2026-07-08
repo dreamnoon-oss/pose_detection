@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     detector = ParallelDetector(
         DETECTION_RULES, regions, lines,
-        hold_frames=15, frame_decay=2, cooldown_frames=45,
+        hold_frames=30, frame_decay=2, cooldown_frames=90,
         detection_kwargs=DETECTION_KWARGS,
     )
 
