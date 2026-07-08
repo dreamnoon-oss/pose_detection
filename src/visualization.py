@@ -310,7 +310,8 @@ def draw_pause_indicator(frame):
 # Train arrival/departure status overlay (top-right)
 # ---------------------------------------------------------------------------
 
-def draw_train_status(frame, train_state, train_mad, train_events=None):
+def draw_train_status(frame, train_state, train_mad, train_events=None,
+                       hold_counter=0, hold_target=0):
     """Draw a compact train detection badge at the top-right of the frame.
 
     Args:
@@ -318,6 +319,8 @@ def draw_train_status(frame, train_state, train_mad, train_events=None):
         train_state: 'AWAY' | 'PRESENT' or None (not configured).
         train_mad: current mean absolute diff value.
         train_events: list of (frame, ts, event_type) from TrainDetector.
+        hold_counter: current consecutive counter value.
+        hold_target: frames needed to confirm (e.g. 15).
     """
     if train_state is None:
         return frame
@@ -327,6 +330,8 @@ def draw_train_status(frame, train_state, train_mad, train_events=None):
     color = (80, 220, 80) if train_state == 'AWAY' else (80, 180, 255)
 
     lines = [f"Train: {state_label}  MAD={train_mad:.1f}"]
+    if hold_target > 0:
+        lines.append(f"  Hold: {hold_counter}/{hold_target}")
 
     if train_events:
         for _f, ts, etype in train_events:
@@ -337,7 +342,7 @@ def draw_train_status(frame, train_state, train_mad, train_events=None):
     box_w = 260
     box_h = len(lines) * row_h + 14
     box_x = frame.shape[1] - box_w - 12
-    box_y = 12
+    box_y = 35
 
     overlay = frame.copy()
     cv2.rectangle(overlay, (box_x, box_y),

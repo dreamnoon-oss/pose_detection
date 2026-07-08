@@ -42,7 +42,9 @@ All rules run independently per frame → timestamped events → mapped to actio
 
 ### Train Detection
 - Background-frame differencing via `src/train_detector.py`
-- MAD-based hysteresis threshold in track ROI
+- Pure accumulation (no decay, no reset): MAD > 30 increments counter, MAD ≤ 30 does nothing
+- Arrival: 20 cumulative frames above 30 → confirmed. Departure: 20 frames below 15 → confirmed
+- Real-time MAD + hold counter displayed at top-right via `draw_train_status`
 
 ## Key Parameters
 
@@ -57,10 +59,10 @@ All rules run independently per frame → timestamped events → mapped to actio
 
 ## Recent Changes
 
-- **Detection thresholds doubled**: `hold_frames` 15→30, `cooldown_frames` 45→90. Actions now require ~1.2s of sustained pose (was ~0.6s), and same-rule re-trigger gap is ~3.6s (was ~1.8s).
-- **Track ROI UX**: T key now toggles select/delete. Fixed bug where existing track region from JSON wasn't recognized without a saved background — `_track_roi_name` now falls back to scanning region names.
-- **Performance profiling**: Added `scripts/profile_timing.py` (headless). On 3060 with yolo26x-pose: GPU inference = 53ms/frame (75%), rendering = 11ms (16%), read = 6ms (9%). Max throughput ~14fps vs video 24.7fps — processing can't keep up with real-time playback.
-- **PIL → cv2 rendering**: Replaced all `put_text_cn` (PIL-based Chinese rendering) with native `cv2.putText` + English labels. Eliminated ~300MB/frame memory churn, ~100ms+ saved per frame.
-- **Pause UX**: Removed right-side redundant panel on pause.
-- **Detection mode**: Set `frame_skip=0, imgsz=640` (full resolution, every frame).
+- **Critical bugfix: false trackbar seek loop** — `cv2.setTrackbarPos` triggers the trackbar callback on every frame, causing `_handle_seek` to run every other iteration. This double-processed frames (extra cap.set + YOLO + reset), cutting effective GPU throughput in half and resetting the train detector hold counter every 2 frames. Fix: skip seek when position delta ≤ 1.
+- **Train detector rewritten**: Pure accumulation counter (no decay, no reset on MAD drop). MAD > 30 increments arrival hold, MAD < 15 increments departure hold. Confirmed at 20 cumulative frames each. Real-time MAD + hold progress displayed in top-right overlay.
+- **Track ROI UX**: T key now toggles select/delete. Fixed bug where existing track region from JSON wasn't recognized without a saved background.
+- **Detection thresholds doubled**: `hold_frames` 15→30, `cooldown_frames` 45→90.
+- **Performance profiling**: `scripts/profile_timing.py`. On 3060 with yolo26x-pose: GPU inference 53ms/frame (75%).
+- **PIL → cv2 rendering**: Eliminated ~300MB/frame memory churn.
 - **English labels**: All action names, metrics, and analysis output in English.

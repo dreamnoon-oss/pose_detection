@@ -84,7 +84,7 @@ def main():
 
         # — YOLO inference —
         t0 = time.perf_counter()
-        results = model(frame, verbose=False, conf=0.5, imgsz=640)
+        results = model(frame, verbose=False, conf=0.5, imgsz=640, half=True)
         timings["infer"] += time.perf_counter() - t0
 
         kp = results[0].keypoints if (results and results[0].keypoints is not None) else None

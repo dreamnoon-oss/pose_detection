@@ -47,6 +47,7 @@ class VideoPlayer:
         self._last_frame = None
         self._trackbar_pos = 0
         self._user_seeking = False
+        self._setting_trackbar = False
         self._analysis = None
         self._last_active = {}
         self._last_metrics = []
@@ -65,7 +66,7 @@ class VideoPlayer:
                     self._track_roi_name = 'track'
                     break
         if _bg_path and self._track_roi_name and os.path.exists(_bg_path):
-            track_roi = self._lookup_roi(_track_name)
+            track_roi = self._lookup_roi(self._track_roi_name)
             if track_roi is not None:
                 self.train_detector = TrainDetector(
                     _bg_path, track_roi, fps=1.0)
@@ -88,7 +89,9 @@ class VideoPlayer:
                 if not self._window_exists():
                     break
 
-                if self._user_seeking:
+                was_seeking = self._user_seeking
+                self._user_seeking = False
+                if was_seeking:
                     self._handle_seek()
                     continue
 
@@ -144,16 +147,16 @@ class VideoPlayer:
                            max(0, self.total_frames - 1), self._on_trackbar)
 
     def _close(self):
+        # Print train summary on manual exit too
+        if self.train_detector is not None:
+            end_time = (self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.fps
+                        if self.fps else 0)
+            print("\n" + self.train_detector.summary(end_time))
         if self.cap is not None:
             self.cap.release()
         if self.out is not None:
             self.out.release()
         cv2.destroyAllWindows()
-        # Print train summary on manual exit too
-        if self.train_detector is not None and self.train_detector.events:
-            end_time = (self.cap.get(cv2.CAP_PROP_POS_FRAMES) / self.fps
-                        if self.fps else 0)
-            print("\n" + self.train_detector.summary(end_time))
         print(f"结果已保存到: {os.path.join(self.output_dir, self.output_name)}")
 
     # ------------------------------------------------------------------
@@ -211,6 +214,10 @@ class VideoPlayer:
             train_state, train_mad = self.train_detector.update(frame)
             self._last_train_state = train_state
             self._last_train_mad = train_mad
+        td = self.train_detector
+        viz.draw_train_status(annotated, self._last_train_state, self._last_train_mad,
+                              hold_counter=(td.hold_counter if td else 0),
+                              hold_target=(td.hold_target if td else 0))
 
         annotated, status_bottom = viz.draw_status_overlay(
             annotated, self.detector.rules, active,
@@ -226,7 +233,9 @@ class VideoPlayer:
         # Progress tracking
         if self._window_exists():
             cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+            self._setting_trackbar = True
             cv2.setTrackbarPos("Progress", self.window_name, cur)
+            self._setting_trackbar = False
             viz.draw_frame_info(annotated, cur, self.total_frames, self.fps)
             cv2.imshow(self.window_name, annotated)
 
@@ -305,11 +314,13 @@ class VideoPlayer:
     def _handle_seek(self):
         """Seek to the trackbar position."""
         self._user_seeking = False
+        cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+        if abs(self._trackbar_pos - cur) <= 1:
+            return  # programmatic update, skip
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, self._trackbar_pos)
         ret, frame = self.cap.read()
         if ret:
             self._last_raw_frame = frame.copy()
-            # Reset train detector state so it re-detects from new position
             if self.train_detector is not None:
                 self.train_detector.reset(self._trackbar_pos)
             results = self.model(frame, verbose=False, conf=self.model_conf,
@@ -347,9 +358,15 @@ class VideoPlayer:
             viz.draw_pause_indicator(paused_frame)
             cur = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) if self.cap else 0
             viz.draw_frame_info(paused_frame, cur, self.total_frames, self.fps)
+            td = self.train_detector
+            viz.draw_train_status(paused_frame, self._last_train_state, self._last_train_mad,
+                                  hold_counter=(td.hold_counter if td else 0),
+                                  hold_target=(td.hold_target if td else 0))
             cv2.imshow(self.window_name, paused_frame)
 
     def _on_trackbar(self, pos):
+        if self._setting_trackbar:
+            return
         self._user_seeking = True
         self._trackbar_pos = pos
 
