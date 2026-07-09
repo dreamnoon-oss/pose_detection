@@ -132,6 +132,14 @@ def remove_last_region(saved_regions):
     return saved_regions
 
 
+def remove_last_line(saved_lines):
+    """Remove the most recently added line."""
+    if saved_lines:
+        removed = saved_lines.pop()
+        print(f"已删除 {removed['name']}，剩余 {len(saved_lines)} 条参考线")
+    return saved_lines
+
+
 def save_background(json_path, frame, frame_idx, track_roi_name=None):
     """Save the current raw frame as a background reference image.
 

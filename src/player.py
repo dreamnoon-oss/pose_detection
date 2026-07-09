@@ -6,7 +6,8 @@ import cv2
 
 from . import visualization as viz
 from .annotation import (select_roi, draw_line_interactive,
-                         remove_last_region, save_annotations, save_background,
+                         remove_last_region, remove_last_line,
+                         save_annotations, save_background,
                          load_background_info)
 from .analyzer import SequenceAnalyzer
 from .train_detector import TrainDetector
@@ -190,6 +191,12 @@ class VideoPlayer:
             results = self._last_results
         kp = results[0].keypoints if (results and results[0].keypoints is not None) else None
 
+        kp = self._filter_best_person(kp, results)
+        if kp is not None and results is not None:
+            results[0].keypoints = kp
+            if results[0].boxes is not None and len(results[0].boxes) > len(kp):
+                results[0].boxes = results[0].boxes[[results[0].boxes.conf.argmax().item()]]
+
         # Parallel detection
         active, new_events = self.detector.update(kp)
         self._last_active = active
@@ -309,6 +316,9 @@ class VideoPlayer:
         elif key == ord('d') and self._paused:
             self.detector.regions = remove_last_region(self.detector.regions)
 
+        elif key == ord('k') and self._paused:
+            self.detector.lines = remove_last_line(self.detector.lines)
+
         return False
 
     def _handle_seek(self):
@@ -326,6 +336,11 @@ class VideoPlayer:
             results = self.model(frame, verbose=False, conf=self.model_conf,
                                  imgsz=self.imgsz, half=self.half)
             kp = results[0].keypoints if (results and results[0].keypoints is not None) else None
+            kp = self._filter_best_person(kp, results)
+            if kp is not None and results is not None:
+                results[0].keypoints = kp
+                if results[0].boxes is not None and len(results[0].boxes) > len(kp):
+                    results[0].boxes = results[0].boxes[[results[0].boxes.conf.argmax().item()]]
             active, _ = self.detector.update(kp)
             self._last_active = active
             self._last_results = results
@@ -392,6 +407,7 @@ class VideoPlayer:
         print("  R    = 鼠标框选区域（指示灯等）")
         print("  L    = 鼠标点击两点画参考线（沿列车）")
         print("  D    = 删除最后一个区域")
+        print("  K    = 删除最后一条参考线")
         print("  S    = 保存区域+参考线到 JSON 文件")
         print("  B    = 保存当前帧为背景参考图（轨道空闲时）")
         print("  T    = 框选/删除轨道监控区域（用于列车检测）")
@@ -401,6 +417,17 @@ class VideoPlayer:
     # ------------------------------------------------------------------
     # Internal: analysis
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _filter_best_person(kp, results):
+        """Keep only the highest-confidence bounding-box person (driver)."""
+        if kp is None or results is None or results[0].boxes is None:
+            return kp
+        boxes = results[0].boxes
+        if len(boxes) <= 1:
+            return kp
+        best_idx = boxes.conf.argmax().item()
+        return kp[[best_idx]]
 
     def _lookup_roi(self, name):
         """Return xywh tuple for a region by name, or None."""

@@ -1,4 +1,4 @@
-"""Entry point: Baoshan video — angle-based pointing detection."""
+"""Entry point: Baoshan video — parallel-line + pass-region detection."""
 
 import sys
 from pathlib import Path
@@ -22,32 +22,25 @@ ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_baoshan.json")
 # Detection rules (unique conditions; each runs independently)
 # ---------------------------------------------------------------------------
 DETECTION_RULES = [
-    {"name": "rule_A", "type": "pointing_with_line",
-     "target_region": "region_1", "ref_line": "line_1"},
-    {"name": "rule_B", "type": "pointing",
-     "target_region": "region_2"},
-    {"name": "rule_C", "type": "pointing",
-     "target_region": "region_3"},
-    {"name": "rule_D", "type": "pointing_with_line",
-     "target_region": "region_4", "ref_line": "line_1"},
+    {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1"},
+    {"name": "rule_B", "type": "parallel_line", "ref_line": "line_2", "allow_elbow": True},
+    {"name": "rule_C", "type": "pass_region", "target_region": "region_1"},
 ]
 
 # ---------------------------------------------------------------------------
 # Action mapping: which rule occurrence maps to which action
 # ---------------------------------------------------------------------------
 ACTION_MAPPING = [
-    {"action": "Act1 PointFwd", "rule": "rule_A", "occurrence": 1},
-    {"action": "Act2 CheckR2", "rule": "rule_B", "occurrence": 1},
-    {"action": "Act3 PointFwd", "rule": "rule_A", "occurrence": 2},
-    {"action": "Act4 CheckR3", "rule": "rule_C", "occurrence": 1},
-    {"action": "Act5 CheckR4", "rule": "rule_D", "occurrence": 1},
+    {"action": "Act1", "rule": "rule_A", "occurrence": 1},
+    {"action": "Act2", "rule": "rule_B", "occurrence": 1},
+    {"action": "Act3", "rule": "rule_A", "occurrence": 2},
+    {"action": "Act4", "rule": "rule_C", "occurrence": 1},
 ]
 
 DETECTION_KWARGS = {
-    "angle_threshold": 30,
-    "line_angle_threshold": 40,
-    "loose_angle_threshold": 55,
+    "angle_threshold": 40,
     "min_arm_len": 30,
+    "min_arm_torso_angle": 45,  # 手臂 vs 躯干夹角需 >45°，防止未抬臂的误触发
 }
 
 # ---------------------------------------------------------------------------
