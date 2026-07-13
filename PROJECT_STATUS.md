@@ -1,6 +1,6 @@
 # Project Status — 端头门司机行为分析
 
-**Updated:** 2026-07-08
+**Updated:** 2026-07-13
 
 ## Architecture
 
@@ -36,6 +36,11 @@ All rules run independently per frame → timestamped events → mapped to actio
 |----------|--------|---------|-------|
 | Shangtichang | `scripts/run_shangtichang.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS |
 | Baoshan | `scripts/run_baoshan.py` | Act1 PointFwd, Act2 CheckR2, Act3 PointFwd, Act4 CheckR3, Act5 CheckR4 | P+L + POINT |
+| Pudongdadao | `scripts/run_pudongdadao.py` | TBD | TBD |
+| Linping | `scripts/run_linping.py` | TBD | TBD |
+| Jingansi | `scripts/run_jingansi.py` | TBD | TBD |
+| Longhuazhong | `scripts/run_longhuazhong.py` | TBD | TBD |
+| Tangqiao | `scripts/run_tangqiao.py` | TBD | TBD |
 
 ### Web UI
 - `app.py` — Streamlit dashboard with parameter controls, video preview, results tabs
@@ -59,6 +64,7 @@ All rules run independently per frame → timestamped events → mapped to actio
 
 ## Recent Changes
 
+- **New station scripts**: Added `run_pudongdadao.py`, `run_linping.py`, `run_jingansi.py`, `run_longhuazhong.py`, `run_tangqiao.py` — detection rules and action mappings TBD.
 - **Critical bugfix: false trackbar seek loop** — `cv2.setTrackbarPos` triggers the trackbar callback on every frame, causing `_handle_seek` to run every other iteration. This double-processed frames (extra cap.set + YOLO + reset), cutting effective GPU throughput in half and resetting the train detector hold counter every 2 frames. Fix: skip seek when position delta ≤ 1.
 - **Train detector rewritten**: Pure accumulation counter (no decay, no reset on MAD drop). MAD > 30 increments arrival hold, MAD < 15 increments departure hold. Confirmed at 20 cumulative frames each. Real-time MAD + hold progress displayed in top-right overlay.
 - **Track ROI UX**: T key now toggles select/delete. Fixed bug where existing track region from JSON wasn't recognized without a saved background.
