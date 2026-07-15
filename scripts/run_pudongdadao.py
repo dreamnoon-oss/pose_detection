@@ -58,5 +58,6 @@ if __name__ == "__main__":
         output_name="pose_output_pudongdadao.mp4",
         imgsz=640, frame_skip=0,
         conf_low_threshold=0.3, conf_mid_threshold=0.6,
+        train_mad_threshold=20,
     )
     player.run()

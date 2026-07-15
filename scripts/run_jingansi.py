@@ -14,7 +14,7 @@ from src.player import VideoPlayer
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-VIDEO_PATH = r"\\10.151.2.205\共享文件2\短视频\静安寺\clipped_segments\静安寺1.mp4"  # TODO: fill in video path
+VIDEO_PATH = r"\\10.151.2.205\共享文件2\短视频\静安寺\clipped_segments\静安寺3.mp4"  # TODO: fill in video path
 MODEL_PATH = str(Path(MODEL_DIR) / "yolo26x-pose.pt")
 ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_jingansi.json")
 
@@ -22,7 +22,7 @@ ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_jingansi.json")
 # Detection rules (unique conditions; each runs independently)
 # ---------------------------------------------------------------------------
 DETECTION_RULES = [
-    {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1"},
+    {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1", "min_arm_torso_angle": 0},
     {"name": "rule_B", "type": "parallel_line", "ref_line": "line_2", "allow_elbow": True},
     {"name": "rule_C", "type": "pass_region", "target_region": "region_1"},
 ]
@@ -63,5 +63,6 @@ if __name__ == "__main__":
         output_name="pose_output_jingansi.mp4",
         imgsz=640, frame_skip=0,
         conf_low_threshold=0.3, conf_mid_threshold=0.6,
+        train_mad_threshold=20,
     )
     player.run()

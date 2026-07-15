@@ -22,7 +22,7 @@ ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_baoshan.json")
 # Detection rules (unique conditions; each runs independently)
 # ---------------------------------------------------------------------------
 DETECTION_RULES = [
-    {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1"},
+    {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1", "min_arm_torso_angle": 0},
     {"name": "rule_B", "type": "parallel_line", "ref_line": "line_2", "allow_elbow": True},
     {"name": "rule_C", "type": "pass_region", "target_region": "region_1"},
 ]
@@ -63,5 +63,6 @@ if __name__ == "__main__":
         output_name="pose_output_baoshan.mp4",
         imgsz=640, frame_skip=0,
         conf_low_threshold=0.3, conf_mid_threshold=0.6,
+        train_mad_threshold=20,
     )
     player.run()

@@ -33,7 +33,8 @@ class VideoPlayer:
                  annotations_file, output_dir, output_name="pose_output.mp4",
                  model_conf=0.5, imgsz=640, frame_skip=0, half=False,
                  conf_low_threshold=CONF_LOW_THRESHOLD,
-                 conf_mid_threshold=CONF_MID_THRESHOLD):
+                 conf_mid_threshold=CONF_MID_THRESHOLD,
+                 train_mad_threshold=20):
         self.model = model
         self.video_path = video_path
         self.detector = detector
@@ -45,6 +46,7 @@ class VideoPlayer:
         self.imgsz = imgsz            # model input resolution
         self.frame_skip = frame_skip  # 0=every frame, 1=every 2nd, 2=every 3rd, etc.
         self.half = half              # FP16 inference
+        self.train_mad_threshold = train_mad_threshold
 
         self.conf_mapper = ConfidenceColorMapper(
             low_threshold=conf_low_threshold,
@@ -78,7 +80,8 @@ class VideoPlayer:
             track_roi = self._lookup_roi(self._track_roi_name)
             if track_roi is not None:
                 self.train_detector = TrainDetector(
-                    _bg_path, track_roi, fps=1.0)
+                    _bg_path, track_roi, fps=1.0,
+                    high_threshold=self.train_mad_threshold)
                 self.detector.enabled = False  # wait for train arrival
                 print(f"列车检测已启用  track_roi={_track_name}  "
                       f"background={os.path.basename(_bg_path)}  "
@@ -464,7 +467,8 @@ class VideoPlayer:
         roi = self._lookup_roi(track_name)
         if roi is not None:
             self.train_detector = TrainDetector(
-                bg_path, roi, fps=getattr(self, 'fps', 1.0))
+                bg_path, roi, fps=getattr(self, 'fps', 1.0),
+                high_threshold=self.train_mad_threshold)
             self._last_train_state = None
             self._last_train_mad = 0.0
             print(f"列车检测已激活  track_roi={track_name}")

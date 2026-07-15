@@ -129,7 +129,8 @@ class ParallelDetector:
                 min_arm_len=kw.get('min_arm_len', 30),
                 angle_threshold=kw.get('angle_threshold', 40),
                 allow_elbow=rule.get('allow_elbow', False),
-                min_arm_torso_angle=kw.get('min_arm_torso_angle', 0.0),
+                min_arm_torso_angle=rule.get('min_arm_torso_angle',
+                    kw.get('min_arm_torso_angle', 0.0)),
             )
 
         elif rtype == 'pass_region':

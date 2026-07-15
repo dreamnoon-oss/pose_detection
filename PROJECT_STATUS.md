@@ -44,19 +44,30 @@ All rules run independently per frame → timestamped events → mapped to actio
 |----------|--------|---------|-------|--------|
 | Shangtichang | `scripts/run_shangtichang.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Done |
 | Baoshan | `scripts/run_baoshan.py` | Act1 PointFwd, Act2 CheckR2, Act3 PointFwd, Act4 CheckR3, Act5 CheckR4 | P+L + POINT | Done |
-| Jingansi | `scripts/run_jingansi.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Rules configured; pending bg save for train detection |
-| Pudongdadao | `scripts/run_pudongdadao.py` | TBD | TBD | Placeholder |
-| Linping | `scripts/run_linping.py` | TBD | TBD | Placeholder |
-| Longhuazhong | `scripts/run_longhuazhong.py` | TBD | TBD | Placeholder |
-| Tangqiao | `scripts/run_tangqiao.py` | TBD | TBD | Placeholder |
+| Jingansi | `scripts/run_jingansi.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Done |
+| Tangqiao | `scripts/run_tangqiao.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Done |
+| Pudongdadao | `scripts/run_pudongdadao.py` | TBD | TBD | Placeholder (no JSON) |
+| Linping | `scripts/run_linping.py` | TBD | TBD | Placeholder (no JSON) |
+| Longhuazhong | `scripts/run_longhuazhong.py` | TBD | TBD | Placeholder (no JSON) |
+
+### Train Detection (all configured stations)
+| Station | Background | Track ROI | Train MAD Threshold |
+|---------|-----------|-----------|---------------------|
+| Shangtichang | Yes | Yes | 20 |
+| Baoshan | Yes | Yes | 20 |
+| Jingansi | Yes | Yes | 20 |
+| Tangqiao | Yes | Yes | 20 |
+| Pudongdadao | No JSON | — | — |
+| Linping | No JSON | — | — |
+| Longhuazhong | No JSON | — | —
 
 ### Web UI
 - `app.py` — Streamlit dashboard with parameter controls, video preview, results tabs
 
 ### Train Detection
 - Background-frame differencing via `src/train_detector.py`
-- Pure accumulation (no decay, no reset): MAD > 30 increments counter, MAD ≤ 30 does nothing
-- Arrival: 20 cumulative frames above 30 → confirmed. Departure: 20 frames below 15 → confirmed
+- Pure accumulation (no decay, no reset): MAD > 20 increments counter, MAD ≤ 20 does nothing
+- Arrival: 20 cumulative frames above 20 → confirmed. Departure: 20 frames below 15 → confirmed
 - Real-time MAD + hold counter displayed at top-right via `draw_train_status`
 - Requires: `track` region + saved background image in annotations JSON
 
@@ -65,21 +76,22 @@ All rules run independently per frame → timestamped events → mapped to actio
 | Param | Value | Notes |
 |-------|-------|-------|
 | angle_threshold | 40° | arm vs ref_line (PAR) |
-| min_arm_torso_angle | 45° | prevents false triggers |
+| min_arm_torso_angle | 45° | prevents false triggers (per-rule overridable) |
 | hold_frames | 30 | consecutive confirm count |
 | frame_decay | 2/frame | tolerates brief dropout |
 | cooldown | 90 frames | prevents event splitting |
 | ray extend | 6× | pass_region extension |
 | conf_low_threshold | 0.3 | red keypoints below this |
 | conf_mid_threshold | 0.6 | yellow below this, green above |
+| train_mad_threshold | 20 | MAD above this → train arriving |
 
 ## Recent Changes
 
-- **Confidence colour system** (`src/confidence_color.py`): New reusable module for three-tier keypoint colouring. Configurable thresholds passed through VideoPlayer to all render functions. All 7 station scripts updated with defaults. Legend overlay added to bottom-right corner.
-- **Jingansi station activated**: Detection rules and action mapping set to match Shangtichang (PAR + CROSS). Train detection pending background frame save.
+- **Train MAD threshold lowered**: `high_threshold` 30 → 20 across all stations. Parameter exposed via `train_mad_threshold` in VideoPlayer and all run scripts.
+- **Fix: per-rule torso angle override**: `min_arm_torso_angle` now checks rule dict first, then falls back to global kw. rule_A (Act1/Act3) disables torso check (`min_arm_torso_angle: 0`) since calling/checking gestures don't require a raised arm. rule_B retains the 45° guard.
+- **Jingansi train detection enabled**: Added `background` + `track_roi` to annotations JSON, matching the existing background PNG.
+- **Tangqiao station activated**: Rules and action mapping configured (same as Shangtichang).
+- **Confidence colour system**: Three-tier keypoint colouring with configurable thresholds and legend overlay.
 - **New station scripts**: Added `run_pudongdadao.py`, `run_linping.py`, `run_jingansi.py`, `run_longhuazhong.py`, `run_tangqiao.py`.
-- **Critical bugfix: false trackbar seek loop** — `cv2.setTrackbarPos` triggers the trackbar callback on every frame. Fix: skip seek when position delta ≤ 1.
-- **Train detector rewritten**: Pure accumulation counter (no decay, no reset on MAD drop).
-- **Detection thresholds doubled**: `hold_frames` 15→30, `cooldown_frames` 45→90.
-- **PIL → cv2 rendering**: Eliminated ~300MB/frame memory churn.
-- **English labels**: All action names, metrics, and analysis output in English.
+- **Critical bugfix: false trackbar seek loop** — skip seek when position delta ≤ 1.
+- **Train detector rewritten**: Pure accumulation counter.

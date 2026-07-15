@@ -12,7 +12,7 @@ class TrainDetector:
     """
 
     def __init__(self, background_path, roi_xywh, *,
-                 fps=1.0, high_threshold=30, low_threshold=15,
+                 fps=1.0, high_threshold=20, low_threshold=15,
                  arrive_frames=20, depart_frames=20):
         self.background = cv2.imread(background_path)
         if self.background is None:

@@ -50,5 +50,10 @@
         ]
       ]
     }
-  ]
+  ],
+  "background": {
+    "image": "regions_jingansi_background.png",
+    "frame": 1
+  },
+  "track_roi": "track"
 }
