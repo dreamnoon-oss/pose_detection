@@ -14,7 +14,7 @@ from src.player import VideoPlayer
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-VIDEO_PATH = r"\\10.151.2.205\共享文件2\司机行为规范样本采样\短视频\宝山1.mp4"
+VIDEO_PATH = r"\\10.151.2.205\共享文件2\司机行为规范样本采样\短视频\宝山4.mp4"
 MODEL_PATH = str(Path(MODEL_DIR) / "yolo26x-pose.pt")
 ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_baoshan.json")
 
@@ -62,5 +62,6 @@ if __name__ == "__main__":
         output_dir=str(Path(OUTPUT_DIR)),
         output_name="pose_output_baoshan.mp4",
         imgsz=640, frame_skip=0,
+        conf_low_threshold=0.3, conf_mid_threshold=0.6,
     )
     player.run()

@@ -10,6 +10,8 @@ from .annotation import (select_roi, draw_line_interactive,
                          save_annotations, save_background,
                          load_background_info)
 from .analyzer import SequenceAnalyzer
+from .confidence_color import ConfidenceColorMapper
+from .config import CONF_LOW_THRESHOLD, CONF_MID_THRESHOLD
 from .train_detector import TrainDetector
 
 
@@ -29,7 +31,9 @@ class VideoPlayer:
 
     def __init__(self, model, video_path, detector, action_mapping=None, *,
                  annotations_file, output_dir, output_name="pose_output.mp4",
-                 model_conf=0.5, imgsz=640, frame_skip=0, half=False):
+                 model_conf=0.5, imgsz=640, frame_skip=0, half=False,
+                 conf_low_threshold=CONF_LOW_THRESHOLD,
+                 conf_mid_threshold=CONF_MID_THRESHOLD):
         self.model = model
         self.video_path = video_path
         self.detector = detector
@@ -41,6 +45,10 @@ class VideoPlayer:
         self.imgsz = imgsz            # model input resolution
         self.frame_skip = frame_skip  # 0=every frame, 1=every 2nd, 2=every 3rd, etc.
         self.half = half              # FP16 inference
+
+        self.conf_mapper = ConfidenceColorMapper(
+            low_threshold=conf_low_threshold,
+            mid_threshold=conf_mid_threshold)
 
         self.cap = None
         self.out = None
@@ -71,8 +79,10 @@ class VideoPlayer:
             if track_roi is not None:
                 self.train_detector = TrainDetector(
                     _bg_path, track_roi, fps=1.0)
+                self.detector.enabled = False  # wait for train arrival
                 print(f"列车检测已启用  track_roi={_track_name}  "
-                      f"background={os.path.basename(_bg_path)}")
+                      f"background={os.path.basename(_bg_path)}  "
+                      f"(动作检测等待列车到站)")
         self._last_train_state = None
         self._last_train_mad = 0.0
 
@@ -211,16 +221,23 @@ class VideoPlayer:
 
         # Render pipeline
         self._last_raw_frame = frame.copy()
-        annotated = viz.draw_pose(frame, results)
-        viz.draw_arm_rays(annotated, kp, self.detector.regions)
+        annotated = viz.draw_pose(frame, results, self.conf_mapper)
+        viz.draw_arm_rays(annotated, kp, self.detector.regions, self.conf_mapper)
         viz.draw_annotations(annotated, self.detector.regions, self.detector.lines,
                              self._track_roi_name)
+        viz.draw_confidence_legend(annotated, self.conf_mapper)
 
         # Train detection (background only, result printed at end)
         if self.train_detector is not None:
+            prev_state = self.train_detector.state
             train_state, train_mad = self.train_detector.update(frame)
             self._last_train_state = train_state
             self._last_train_mad = train_mad
+            # Enable action detection when train arrives
+            if prev_state != 'PRESENT' and train_state == 'PRESENT':
+                self.detector.enable()
+            elif prev_state == 'PRESENT' and train_state != 'PRESENT':
+                self.detector.enabled = False
         td = self.train_detector
         viz.draw_train_status(annotated, self._last_train_state, self._last_train_mad,
                               hold_counter=(td.hold_counter if td else 0),
@@ -333,6 +350,7 @@ class VideoPlayer:
             self._last_raw_frame = frame.copy()
             if self.train_detector is not None:
                 self.train_detector.reset(self._trackbar_pos)
+                self.detector.enabled = False
             results = self.model(frame, verbose=False, conf=self.model_conf,
                                  imgsz=self.imgsz, half=self.half)
             kp = results[0].keypoints if (results and results[0].keypoints is not None) else None
@@ -344,10 +362,11 @@ class VideoPlayer:
             active, _ = self.detector.update(kp)
             self._last_active = active
             self._last_results = results
-            self._last_frame = viz.draw_pose(frame, results)
-            viz.draw_arm_rays(self._last_frame, kp, self.detector.regions)
+            self._last_frame = viz.draw_pose(frame, results, self.conf_mapper)
+            viz.draw_arm_rays(self._last_frame, kp, self.detector.regions, self.conf_mapper)
             viz.draw_annotations(self._last_frame, self.detector.regions, self.detector.lines,
                                  self._track_roi_name)
+            viz.draw_confidence_legend(self._last_frame, self.conf_mapper)
             if self.train_detector is not None:
                 train_state, train_mad = self.train_detector.update(frame)
                 self._last_train_state = train_state

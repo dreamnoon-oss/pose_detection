@@ -12,8 +12,12 @@ from .config import (
 # Pose skeleton drawing
 # ---------------------------------------------------------------------------
 
-def draw_pose(frame, results):
-    """Draw keypoints 5-12 and skeleton connections on a copy of *frame*."""
+def draw_pose(frame, results, conf_mapper=None):
+    """Draw keypoints 5-12 and skeleton connections on a copy of *frame*.
+
+    If *conf_mapper* is provided, keypoint circles are coloured by confidence
+    tier instead of body-part identity.
+    """
     annotated = frame.copy()
 
     if results[0].keypoints is None:
@@ -38,7 +42,10 @@ def draw_pose(frame, results):
         for kp_id in SHOW_KEYPOINTS:
             if conf[kp_id] > CONF_THRESHOLD:
                 x, y = int(xy[kp_id][0]), int(xy[kp_id][1])
-                color = KP_COLORS.get(kp_id, (0, 255, 0))
+                if conf_mapper is not None:
+                    color = conf_mapper.get_colour(float(conf[kp_id]))
+                else:
+                    color = KP_COLORS.get(kp_id, (0, 255, 0))
                 cv2.circle(annotated, (x, y), 6, color, -1, cv2.LINE_AA)
                 cv2.circle(annotated, (x, y), 6, (255, 255, 255), 1, cv2.LINE_AA)
 
@@ -364,16 +371,20 @@ def draw_train_status(frame, train_state, train_mad, train_events=None,
 # Debug: draw extended arm rays for pass_region rules
 # ---------------------------------------------------------------------------
 
-def draw_arm_rays(frame, keypoints_obj, regions):
+def draw_arm_rays(frame, keypoints_obj, regions, conf_mapper=None):
     """Draw shoulder->elbow->wrist segments and shoulder->extended-wrist rays.
 
     Arm segments (shoulder->elbow->wrist) are drawn in thick cyan/magenta.
     Extended rays are green if they hit a region, red otherwise.
 
+    If *conf_mapper* is given, elbow and wrist circles use confidence-tier
+    colours instead of the fixed side colour.
+
     Args:
         frame: BGR image (modified-in-place).
         keypoints_obj: ultralytics ``Keypoints`` or None.
         regions: list of region dicts ``{name, xywh}``.
+        conf_mapper: optional ``ConfidenceColorMapper``.
     """
     import math
     if keypoints_obj is None:
@@ -392,14 +403,16 @@ def draw_arm_rays(frame, keypoints_obj, regions):
                 s_pt = (int(xy[shoulder_id][0]), int(xy[shoulder_id][1]))
                 e_pt = (int(xy[elbow_id][0]), int(xy[elbow_id][1]))
                 cv2.line(frame, s_pt, e_pt, side_color, 3, cv2.LINE_AA)
-                cv2.circle(frame, e_pt, 5, side_color, -1, cv2.LINE_AA)
+                e_color = conf_mapper.get_colour(float(conf[elbow_id])) if conf_mapper else side_color
+                cv2.circle(frame, e_pt, 5, e_color, -1, cv2.LINE_AA)
 
             # elbow->wrist segment
             if conf[elbow_id] > 0.3 and conf[wrist_id] > 0.3:
                 e_pt = (int(xy[elbow_id][0]), int(xy[elbow_id][1]))
                 w_pt = (int(xy[wrist_id][0]), int(xy[wrist_id][1]))
                 cv2.line(frame, e_pt, w_pt, side_color, 3, cv2.LINE_AA)
-                cv2.circle(frame, w_pt, 5, side_color, -1, cv2.LINE_AA)
+                w_color = conf_mapper.get_colour(float(conf[wrist_id])) if conf_mapper else side_color
+                cv2.circle(frame, w_pt, 5, w_color, -1, cv2.LINE_AA)
 
             # Extended ray (shoulder->wrist->extended, for region hit testing)
             if conf[shoulder_id] <= 0.5 or conf[wrist_id] <= 0.5:
@@ -668,3 +681,44 @@ def _iter_persons_metric(keypoints_obj):
         xy = kps.xy[0].cpu().numpy()
         conf = kps.conf[0].cpu().numpy()
         yield xy, conf
+
+
+# ---------------------------------------------------------------------------
+# Confidence colour legend (bottom-right)
+# ---------------------------------------------------------------------------
+
+def draw_confidence_legend(frame, conf_mapper):
+    """Draw a small confidence-tier colour legend at the bottom-right corner.
+
+    Args:
+        frame: BGR image (modified in-place).
+        conf_mapper: ``ConfidenceColorMapper`` instance.
+    """
+    if conf_mapper is None:
+        return frame
+
+    font_face = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.36
+    row_h = 16
+    pad = 8
+    entries = conf_mapper.legend_entries
+
+    box_w = 210
+    box_h = len(entries) * row_h + pad * 2
+    box_x = frame.shape[1] - box_w - 12
+    box_y = frame.shape[0] - box_h - 20
+
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (box_x, box_y),
+                  (box_x + box_w, box_y + box_h), (20, 20, 20), -1)
+    cv2.rectangle(overlay, (box_x, box_y),
+                  (box_x + box_w, box_y + box_h), (60, 60, 60), 1)
+    cv2.addWeighted(overlay, 0.65, frame, 0.35, 0, frame)
+
+    for i, (label, colour) in enumerate(entries):
+        row_y = box_y + pad + i * row_h
+        cv2.circle(frame, (box_x + pad + 5, row_y + 9), 5, colour, -1, cv2.LINE_AA)
+        cv2.putText(frame, label, (box_x + pad + 16, row_y + 13),
+                    font_face, font_scale, (200, 200, 200), 1, cv2.LINE_AA)
+
+    return frame

@@ -10,7 +10,11 @@ from . import detection as det
 
 
 class ParallelDetector:
-    """Run multiple detection rules independently, recording timestamped events."""
+    """Run multiple detection rules independently, recording timestamped events.
+
+    Set ``enabled = False`` to pause detection (e.g. before train arrival).
+    When disabled, ``update()`` returns empty results and does not accumulate.
+    """
 
     def __init__(self, rules, regions, lines, *,
                  hold_frames=15, frame_decay=2, cooldown_frames=45,
@@ -28,6 +32,7 @@ class ParallelDetector:
         self.cooldown_counters = {r['name']: 0 for r in rules}
         self.frame_number = 0
         self.events = []
+        self.enabled = True
 
     # ------------------------------------------------------------------
     # Public API
@@ -41,8 +46,17 @@ class ParallelDetector:
         self.frame_number = 0
         self.events.clear()
 
+    def enable(self):
+        """Enable detection and reset all hold/cooldown counters (events preserved)."""
+        self.enabled = True
+        for name in self.hold_counters:
+            self.hold_counters[name] = 0
+            self.cooldown_counters[name] = 0
+
     def update(self, keypoints_obj):
         """Process one frame against all rules.
+
+        Does nothing when ``self.enabled`` is False.
 
         Returns:
             ``(active, new_events)`` where *active* is a dict of rule_name →
@@ -52,6 +66,9 @@ class ParallelDetector:
         self.frame_number += 1
         active = {}
         new_events = []
+
+        if not self.enabled:
+            return active, new_events
 
         for rule in self.rules:
             name = rule['name']

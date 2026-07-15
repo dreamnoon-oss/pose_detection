@@ -62,3 +62,9 @@ DEFAULT_LINE_ANGLE_THRESHOLD = 40   # max angle between arm and reference line
 DEFAULT_HOLD_FRAMES = 15            # consecutive frames to confirm action
 DEFAULT_MIN_ARM_LEN = 30            # minimum arm pixel length to consider
 FRAME_DECAY = 2                     # hold counter decay per frame (tolerates brief dropout)
+
+# ---------------------------------------------------------------------------
+# Confidence colour tiers (for keypoint visualisation)
+# ---------------------------------------------------------------------------
+CONF_LOW_THRESHOLD = 0.3             # below this: red
+CONF_MID_THRESHOLD = 0.6             # below this (>= low): yellow;  above: green

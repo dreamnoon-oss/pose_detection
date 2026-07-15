@@ -1,6 +1,6 @@
 # Project Status — 端头门司机行为分析
 
-**Updated:** 2026-07-13
+**Updated:** 2026-07-15
 
 ## Architecture
 
@@ -12,7 +12,7 @@ All rules run independently per frame → timestamped events → mapped to actio
 ### Detection engine (`src/detection.py` + `src/detector.py`)
 - 4 detection types: `parallel_line`, `pass_region`, `pointing`, `pointing_with_line`
 - COCO 17-keypoint, indices 5-12 (shoulders/elbows/wrists/hips)
-- Per-rule hold counter (15 frames confirm, -2 decay) + 45-frame cooldown
+- Per-rule hold counter (30 frames confirm, -2 decay) + 90-frame cooldown
 - Normal mode: `frame_skip=0, imgsz=640` (every-frame detection)
 
 ### Visualization (`src/visualization.py`)
@@ -24,23 +24,31 @@ All rules run independently per frame → timestamped events → mapped to actio
 - `draw_train_status` — train arrival/departure badge (top-right)
 - `draw_analysis_result` — final result overlay (bottom-left)
 - `draw_frame_info` — frame counter (top-right)
+- `draw_confidence_legend` — confidence tier colour legend (bottom-right)
+
+### Confidence Colour (`src/confidence_color.py` — NEW)
+- Three-tier keypoint confidence colouring: red (<0.3), yellow (0.3-0.6), green (>0.6)
+- Configurable per-station via `conf_low_threshold` / `conf_mid_threshold` in VideoPlayer
+- Applied to pose keypoints, elbow circles, and wrist circles
+- Legend drawn at bottom-right corner
 
 ### Player (`src/player.py`)
 - Interactive video player with progress bar, pause/seek/annotate
 - Pause: only left panel (right panel removed)
 - Keys: Space=pause, Q=quit, R=draw region, L=draw line, T=track ROI, B=save bg, S=save JSON, Z=reset
+- Confidence mapper created in constructor, passed through all render calls
 
 ### Scenarios
 
-| Scenario | Script | Actions | Types |
-|----------|--------|---------|-------|
-| Shangtichang | `scripts/run_shangtichang.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS |
-| Baoshan | `scripts/run_baoshan.py` | Act1 PointFwd, Act2 CheckR2, Act3 PointFwd, Act4 CheckR3, Act5 CheckR4 | P+L + POINT |
-| Pudongdadao | `scripts/run_pudongdadao.py` | TBD | TBD |
-| Linping | `scripts/run_linping.py` | TBD | TBD |
-| Jingansi | `scripts/run_jingansi.py` | TBD | TBD |
-| Longhuazhong | `scripts/run_longhuazhong.py` | TBD | TBD |
-| Tangqiao | `scripts/run_tangqiao.py` | TBD | TBD |
+| Scenario | Script | Actions | Types | Status |
+|----------|--------|---------|-------|--------|
+| Shangtichang | `scripts/run_shangtichang.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Done |
+| Baoshan | `scripts/run_baoshan.py` | Act1 PointFwd, Act2 CheckR2, Act3 PointFwd, Act4 CheckR3, Act5 CheckR4 | P+L + POINT | Done |
+| Jingansi | `scripts/run_jingansi.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Rules configured; pending bg save for train detection |
+| Pudongdadao | `scripts/run_pudongdadao.py` | TBD | TBD | Placeholder |
+| Linping | `scripts/run_linping.py` | TBD | TBD | Placeholder |
+| Longhuazhong | `scripts/run_longhuazhong.py` | TBD | TBD | Placeholder |
+| Tangqiao | `scripts/run_tangqiao.py` | TBD | TBD | Placeholder |
 
 ### Web UI
 - `app.py` — Streamlit dashboard with parameter controls, video preview, results tabs
@@ -50,6 +58,7 @@ All rules run independently per frame → timestamped events → mapped to actio
 - Pure accumulation (no decay, no reset): MAD > 30 increments counter, MAD ≤ 30 does nothing
 - Arrival: 20 cumulative frames above 30 → confirmed. Departure: 20 frames below 15 → confirmed
 - Real-time MAD + hold counter displayed at top-right via `draw_train_status`
+- Requires: `track` region + saved background image in annotations JSON
 
 ## Key Parameters
 
@@ -57,18 +66,20 @@ All rules run independently per frame → timestamped events → mapped to actio
 |-------|-------|-------|
 | angle_threshold | 40° | arm vs ref_line (PAR) |
 | min_arm_torso_angle | 45° | prevents false triggers |
-| hold_frames | 30 | consecutive confirm count (was 15) |
+| hold_frames | 30 | consecutive confirm count |
 | frame_decay | 2/frame | tolerates brief dropout |
-| cooldown | 90 frames | prevents event splitting (was 45) |
+| cooldown | 90 frames | prevents event splitting |
 | ray extend | 6× | pass_region extension |
+| conf_low_threshold | 0.3 | red keypoints below this |
+| conf_mid_threshold | 0.6 | yellow below this, green above |
 
 ## Recent Changes
 
-- **New station scripts**: Added `run_pudongdadao.py`, `run_linping.py`, `run_jingansi.py`, `run_longhuazhong.py`, `run_tangqiao.py` — detection rules and action mappings TBD.
-- **Critical bugfix: false trackbar seek loop** — `cv2.setTrackbarPos` triggers the trackbar callback on every frame, causing `_handle_seek` to run every other iteration. This double-processed frames (extra cap.set + YOLO + reset), cutting effective GPU throughput in half and resetting the train detector hold counter every 2 frames. Fix: skip seek when position delta ≤ 1.
-- **Train detector rewritten**: Pure accumulation counter (no decay, no reset on MAD drop). MAD > 30 increments arrival hold, MAD < 15 increments departure hold. Confirmed at 20 cumulative frames each. Real-time MAD + hold progress displayed in top-right overlay.
-- **Track ROI UX**: T key now toggles select/delete. Fixed bug where existing track region from JSON wasn't recognized without a saved background.
+- **Confidence colour system** (`src/confidence_color.py`): New reusable module for three-tier keypoint colouring. Configurable thresholds passed through VideoPlayer to all render functions. All 7 station scripts updated with defaults. Legend overlay added to bottom-right corner.
+- **Jingansi station activated**: Detection rules and action mapping set to match Shangtichang (PAR + CROSS). Train detection pending background frame save.
+- **New station scripts**: Added `run_pudongdadao.py`, `run_linping.py`, `run_jingansi.py`, `run_longhuazhong.py`, `run_tangqiao.py`.
+- **Critical bugfix: false trackbar seek loop** — `cv2.setTrackbarPos` triggers the trackbar callback on every frame. Fix: skip seek when position delta ≤ 1.
+- **Train detector rewritten**: Pure accumulation counter (no decay, no reset on MAD drop).
 - **Detection thresholds doubled**: `hold_frames` 15→30, `cooldown_frames` 45→90.
-- **Performance profiling**: `scripts/profile_timing.py`. On 3060 with yolo26x-pose: GPU inference 53ms/frame (75%).
 - **PIL → cv2 rendering**: Eliminated ~300MB/frame memory churn.
 - **English labels**: All action names, metrics, and analysis output in English.

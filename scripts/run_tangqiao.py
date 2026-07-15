@@ -62,5 +62,6 @@ if __name__ == "__main__":
         output_dir=str(Path(OUTPUT_DIR)),
         output_name="pose_output_new_station.mp4",
         imgsz=640, frame_skip=0,
+        conf_low_threshold=0.3, conf_mid_threshold=0.6,
     )
     player.run()
