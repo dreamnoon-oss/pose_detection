@@ -17,17 +17,23 @@ from .geometry import angle_between, min_angle_to_rect, segments_intersect
 def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
                                min_arm_len=30, angle_threshold=40,
                                allow_elbow=False,
-                               min_arm_torso_angle=0.0):
+                               min_arm_torso_angle=0.0,
+                               dynamic_angle=False):
     """Check whether any person's arm is roughly parallel to a reference line.
 
     Args:
         keypoints_obj: ultralytics ``Keypoints`` (multi-person).
         line_pts: ``[(x1,y1), (x2,y2)]`` defining the reference line.
         min_arm_len: minimum arm pixel length to consider.
-        angle_threshold: maximum angle (degrees) between arm and line to count as parallel.
-        allow_elbow: if True and wrist is below confidence, fall back to shoulder→elbow.
+        angle_threshold: maximum angle (degrees) between arm and line to count
+            as parallel. When *dynamic_angle* is True and elbow+wrist are valid,
+            the effective threshold is ``angle_threshold + arm_bend``.
+        allow_elbow: if True and wrist is below confidence, fall back to
+            shoulder→elbow (no dynamic adjustment in fallback mode).
         min_arm_torso_angle: if > 0, the arm→torso angle (shoulder→wrist vs
             shoulder→hip, same side) must exceed this value. Default 0 = no check.
+        dynamic_angle: if True, compensate for 2D foreshortening by adding the
+            elbow-bend angle ``(shoulder→elbow vs elbow→wrist)`` to the threshold.
 
     Returns:
         ``(is_parallel, side, angle, far_point, shoulder)``
@@ -47,9 +53,18 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
 
             shoulder = (float(xy[shoulder_id][0]), float(xy[shoulder_id][1]))
 
+            effective_threshold = angle_threshold
             far_id = None
+
             if conf[wrist_id] > CONF_THRESHOLD:
                 far_id = wrist_id
+                if dynamic_angle and conf[elbow_id] > CONF_THRESHOLD:
+                    elbow = (float(xy[elbow_id][0]), float(xy[elbow_id][1]))
+                    upper = (elbow[0] - shoulder[0], elbow[1] - shoulder[1])
+                    lower = (float(xy[wrist_id][0]) - elbow[0],
+                             float(xy[wrist_id][1]) - elbow[1])
+                    arm_bend = angle_between(upper, lower)
+                    effective_threshold = angle_threshold + arm_bend * 0.6
             elif allow_elbow and conf[elbow_id] > CONF_THRESHOLD:
                 far_id = elbow_id
 
@@ -62,7 +77,7 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
                 continue
 
             ang = angle_between(arm_dir, line_dir)
-            if ang >= angle_threshold:
+            if ang >= effective_threshold:
                 continue
 
             # Optional: arm vs torso angle check (same-side shoulder→hip)

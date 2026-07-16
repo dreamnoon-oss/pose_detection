@@ -34,7 +34,8 @@ class VideoPlayer:
                  model_conf=0.5, imgsz=640, frame_skip=0, half=False,
                  conf_low_threshold=CONF_LOW_THRESHOLD,
                  conf_mid_threshold=CONF_MID_THRESHOLD,
-                 train_mad_threshold=20):
+                 train_mad_threshold=20,
+                 show_arm_bend=False):
         self.model = model
         self.video_path = video_path
         self.detector = detector
@@ -47,6 +48,7 @@ class VideoPlayer:
         self.frame_skip = frame_skip  # 0=every frame, 1=every 2nd, 2=every 3rd, etc.
         self.half = half              # FP16 inference
         self.train_mad_threshold = train_mad_threshold
+        self.show_arm_bend = show_arm_bend
 
         self.conf_mapper = ConfidenceColorMapper(
             low_threshold=conf_low_threshold,
@@ -249,7 +251,8 @@ class VideoPlayer:
         annotated, status_bottom = viz.draw_status_overlay(
             annotated, self.detector.rules, active,
             self.detector.events, self.action_mapping)
-        annotated = viz.draw_action_metrics(annotated, metrics, y=status_bottom + 6)
+        annotated = viz.draw_action_metrics(annotated, metrics, y=status_bottom + 6,
+                                              show_arm_bend=self.show_arm_bend)
 
         infer_ms = (time.time() - t0) * 1000
         self._last_frame = annotated.copy()
@@ -383,7 +386,8 @@ class VideoPlayer:
                 self.detector.detection_kwargs)
             self._last_metrics = metrics
             self._last_frame = viz.draw_action_metrics(
-                self._last_frame, metrics, y=status_bottom + 6)
+                self._last_frame, metrics, y=status_bottom + 6,
+                show_arm_bend=self.show_arm_bend)
             cv2.imshow(self.window_name, self._last_frame)
 
     def _draw_paused_frame(self):

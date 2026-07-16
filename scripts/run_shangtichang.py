@@ -14,7 +14,7 @@ from src.player import VideoPlayer
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-VIDEO_PATH = r"\\10.151.2.205\共享文件2\司机行为规范样本采样\短视频\上体场2.mp4"
+VIDEO_PATH = r"\\10.151.2.205\共享文件2\司机行为规范样本采样\短视频\上体场1.mp4"
 MODEL_PATH = str(Path(MODEL_DIR) / "yolo26x-pose.pt")
 ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_shangtichang.json")
 
@@ -22,8 +22,8 @@ ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_shangtichang.json")
 # Detection rules (unique conditions; each runs independently)
 # ---------------------------------------------------------------------------
 DETECTION_RULES = [
-    {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1", "min_arm_torso_angle": 0},
-    {"name": "rule_B", "type": "parallel_line", "ref_line": "line_2", "allow_elbow": True},
+    {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1", "min_arm_torso_angle": 0, "dynamic_angle": True},
+    {"name": "rule_B", "type": "parallel_line", "ref_line": "line_2", "allow_elbow": True, "dynamic_angle": True},
     {"name": "rule_C", "type": "pass_region", "target_region": "region_1"},
 ]
 

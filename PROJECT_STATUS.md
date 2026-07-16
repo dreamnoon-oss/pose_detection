@@ -82,9 +82,11 @@ All rules run independently per frame → timestamped events → mapped to actio
 | conf_low_threshold | 0.3 | red keypoints below this |
 | conf_mid_threshold | 0.6 | yellow below this, green above |
 | train_mad_threshold | 20 | MAD above this → train arriving |
+| dynamic_angle_coeff | 0.6 | elbow bend compensation for 2D foreshortening |
 
 ## Recent Changes
 
+- **Dynamic angle compensation**: All stations now use `dynamic_angle` on parallel_line rules. Effective threshold = 40° + arm_bend × 0.6, compensating for 2D foreshortening when the arm is not perfectly straight in the camera plane.
 - **2026-07-16**: Pudongdadao, Linping, Longhuazhong stations activated with full rules and action mappings. Removed deprecated Streamlit dashboard (`app.py`) and v1 serial state machine (`src/state_machine.py`). Fixed `save_annotations` to preserve `background` and `track_roi` fields on save. Cleaned up stale cache and old package layout.
 - **2026-07-15**: Train MAD threshold lowered 30→20 across all stations. Fix per-rule torso angle override. Jingansi train detection enabled. Tangqiao station activated.
 - **Confidence colour system**: Three-tier keypoint colouring with configurable thresholds and legend overlay.

@@ -48,7 +48,7 @@ pose_detection/
 
 | 类型 | 函数 | 说明 |
 |------|------|------|
-| `parallel_line` | `check_arm_parallel_to_line()` | 肩→腕向量与参考线夹角 < 阈值。可选肘部回退、躯干夹角下限 |
+| `parallel_line` | `check_arm_parallel_to_line()` | 肩→腕向量与参考线夹角 < 阈值（支持动态角度补偿）。可选肘部回退、躯干夹角下限 |
 | `pass_region` | `check_arm_passes_region()` | 肩→腕射线（可延长）穿过/落在矩形区域内 |
 | `pointing` | `check_pointing()` | 手臂方向与区域角点夹角 < 阈值 |
 | `pointing_with_line` | `check_pointing_with_line()` | 手臂平行于线 且 朝向区域 |
@@ -65,6 +65,7 @@ pose_detection/
 | 帧衰减 | -2/帧 | 容忍短暂丢帧 |
 | 冷却期 | 90 帧 | 事件触发后同规则暂停检测 |
 | 最小手臂长度 | 30px | 过滤无效检测 |
+| 动态角度系数 | 0.6× | 肘部弯曲补偿系数，实际阈值 = 40° + 弯曲角 × 0.6 |
 
 ## 已配置站点
 

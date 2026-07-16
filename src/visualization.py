@@ -524,10 +524,17 @@ def compute_action_metrics(keypoints_obj, action_mapping, rules, regions, lines,
 
                     allow_elbow = rule.get('allow_elbow', False)
                     far_pt = segment_label = None
+                    arm_bend_val = None
 
                     if conf[wrist_id] > CONF_THRESHOLD:
                         far_pt = (float(xy[wrist_id][0]), float(xy[wrist_id][1]))
                         segment_label = 'S-W'
+                        # Compute arm bend for display (elbow angle)
+                        if conf[elbow_id] > CONF_THRESHOLD:
+                            elbow = (float(xy[elbow_id][0]), float(xy[elbow_id][1]))
+                            upper = (elbow[0] - shoulder[0], elbow[1] - shoulder[1])
+                            lower = (far_pt[0] - elbow[0], far_pt[1] - elbow[1])
+                            arm_bend_val = angle_between(upper, lower) * 0.6
                     elif allow_elbow and conf[elbow_id] > CONF_THRESHOLD:
                         far_pt = (float(xy[elbow_id][0]), float(xy[elbow_id][1]))
                         segment_label = 'S-E'
@@ -539,7 +546,7 @@ def compute_action_metrics(keypoints_obj, action_mapping, rules, regions, lines,
                         continue
                     ang = angle_between(arm_dir, line_dir)
                     if best is None or ang < best[0]:
-                        best = (ang, side, segment_label)
+                        best = (ang, side, segment_label, arm_bend_val)
 
                 elif rtype == 'pointing' or rtype == 'pointing_with_line':
                     region_xywh = region_lookup.get(rule.get('target_region', ''))
@@ -601,24 +608,27 @@ def compute_action_metrics(keypoints_obj, action_mapping, rules, regions, lines,
                     if best is None or val < best[0]:
                         best = (val, side, 'W')
 
+        arm_bend = best[3] if (best and rtype == 'parallel_line' and len(best) > 3) else None
         results.append({
             'action': mapping['action'],
             'metric_type': rtype,
             'value': best[0] if best else None,
             'side': best[1] if best else None,
             'segment': best[2] if best else None,
+            'arm_bend': arm_bend,
         })
 
     return results
 
 
-def draw_action_metrics(frame, metrics, *, x=None, y=None):
+def draw_action_metrics(frame, metrics, *, x=None, y=None, show_arm_bend=False):
     """Draw per-action real-time metrics on the left side, below the main panel.
 
     Args:
         frame: BGR image (modified in-place).
         metrics: list from ``compute_action_metrics()``.
         x, y: top-left position. Defaults to below the main detection panel.
+        show_arm_bend: if True, append elbow-bend angle for parallel_line rules.
     """
     if not metrics:
         return frame
@@ -661,6 +671,8 @@ def draw_action_metrics(frame, metrics, *, x=None, y=None):
             seg = m.get('segment', '')
             side = m.get('side', '')
             text = f"{action_label}: {val:.0f}deg ({side}{seg})" if side else f"{action_label}: {val:.0f}deg"
+            if show_arm_bend and m.get('arm_bend') is not None:
+                text += f"  bend={m['arm_bend']:.0f}deg"
             if val <= 30:
                 color = (80, 220, 80)
             elif val <= 55:
