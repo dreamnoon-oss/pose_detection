@@ -26,17 +26,22 @@ pose_detection/
 │   ├── detection.py       # 4 种检测算法（平行线/穿区域/指向/组合）
 │   ├── detector.py        # 并行检测器（多规则同时运行）
 │   ├── analyzer.py        # 时序分析器（事件→动作映射+顺序判定）
-│   ├── state_machine.py   # [已弃用] 旧版串行状态机
 │   ├── visualization.py   # 可视化（骨架、面板、中文渲染、调试射线）
 │   ├── annotation.py      # 标注工具（区域框选、参考线、背景保存）
 │   ├── train_detector.py  # 列车进出站检测（背景帧差法）
 │   └── player.py          # 交互式视频播放器
 ├── scripts/
 │   ├── run_shangtichang.py
-│   └── run_baoshan.py
-├── data/                   # 标注数据 (JSON)
+│   ├── run_baoshan.py
+│   ├── run_jingansi.py
+│   ├── run_tangqiao.py
+│   ├── run_pudongdadao.py
+│   ├── run_linping.py
+│   └── run_longhuazhong.py
+├── data/                   # 标注数据 (JSON + 背景图)
 ├── models/                 # 模型文件
-└── output/                 # 输出视频
+├── output/                 # 输出视频
+└── docs/                   # 详细文档
 ```
 
 ## 检测策略
@@ -56,12 +61,26 @@ pose_detection/
 | 平行角度阈值 | 40° | 手臂与参考线最大夹角 |
 | 躯干夹角下限 | 45° | 手臂 vs 肩→髋夹角需 > 45°（防止未抬臂误触发） |
 | 延长倍数 | 6× | pass_region 时腕部沿手臂方向延长倍数 |
-| 持续帧数 | 15 | 连续命中帧数确认事件 |
+| 持续帧数 | 30 | 连续命中帧数确认事件 |
 | 帧衰减 | -2/帧 | 容忍短暂丢帧 |
-| 冷却期 | 45 帧 | 事件触发后同规则暂停检测 |
+| 冷却期 | 90 帧 | 事件触发后同规则暂停检测 |
 | 最小手臂长度 | 30px | 过滤无效检测 |
 
-## 动作序列（上体场）
+## 已配置站点
+
+| 站点 | 脚本 | 检测类型 | 动作数 |
+|------|------|------|--------|
+| 上体场 | `run_shangtichang.py` | PAR + CROSS | 4 |
+| 宝山 | `run_baoshan.py` | P+L + POINT | 5 |
+| 静安寺 | `run_jingansi.py` | PAR + CROSS | 4 |
+| 塘桥 | `run_tangqiao.py` | PAR + CROSS | 4 |
+| 浦东大道 | `run_pudongdadao.py` | PAR + CROSS | 4 |
+| 临平 | `run_linping.py` | PAR + CROSS | 4 |
+| 龙华中 | `run_longhuazhong.py` | PAR + CROSS | 4 |
+
+所有站点均已配置列车进出站检测（背景帧差法）。
+
+## 动作序列（以上体场为例）
 
 | 动作 | 规则 | 检测类型 | 目标 |
 |------|------|------|------|
@@ -79,6 +98,15 @@ pose_detection/
 - **pass_region 规则**：显示"穿过"或"未穿过"
 
 暂停后面板自动切换到右上角，避免与"PAUSED"文字重叠。每条规则独立计算，不受检测阈值限制，始终可见。
+
+### 置信度着色
+
+关键点根据置信度分三档显示：
+- **红色** < 0.3 — 低置信度
+- **黄色** 0.3 ~ 0.6 — 中等置信度
+- **绿色** > 0.6 — 高置信度
+
+阈值可通过 `conf_low_threshold` / `conf_mid_threshold` 按站点调整，右下角显示颜色图例。
 
 ### 可视化增强
 
@@ -100,12 +128,12 @@ pose_detection/
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| high_threshold | 30 | ROI 内 MAD 均值高于此值 → 列车可能在场 |
-| low_threshold | 20 | MAD 低于此值 → 轨道可能空闲 |
-| confirm_frames | 15 | 连续确认帧数，防抖动 |
+| high_threshold | 20 | ROI 内 MAD 均值高于此值 → 列车可能在场 |
+| low_threshold | 15 | MAD 低于此值 → 轨道可能空闲 |
+| confirm_frames | 20 | 连续确认帧数，防抖动 |
 
-- MAD 持续高于 30（15帧）→ 判定"列车到站"，记录到站时间
-- MAD 持续低于 20（15帧）→ 判定"列车离站"，记录离站时间
+- MAD 持续高于 20（20帧）→ 判定"列车到站"，记录到站时间
+- MAD 持续低于 15（20帧）→ 判定"列车离站"，记录离站时间
 - 视频结束时输出：`列车到站: X.Xs` / `列车离站: Y.Ys` / `停靠时段: X.Xs ~ Y.Ys`
 
 ## 快速开始
@@ -126,8 +154,13 @@ pip install -r requirements.txt
 ### 运行
 
 ```bash
-python scripts/run_shangtichang.py   # 上体场（主版本）
+python scripts/run_shangtichang.py   # 上体场
 python scripts/run_baoshan.py        # 宝山（角度法）
+python scripts/run_jingansi.py       # 静安寺
+python scripts/run_tangqiao.py       # 塘桥
+python scripts/run_pudongdadao.py    # 浦东大道
+python scripts/run_linping.py        # 临平
+python scripts/run_longhuazhong.py   # 龙华中
 ```
 
 ## 操作说明
@@ -141,6 +174,7 @@ python scripts/run_baoshan.py        # 宝山（角度法）
 | **暂停时** | |
 | `R` | 框选矩形区域 |
 | `L` | 鼠标画参考线 |
+| `T` | 框选/删除轨道监控区域 |
 | `B` | 保存当前帧为背景参考图 |
 | `D` | 删除最后区域 |
 | `K` | 删除最后参考线 |

@@ -55,15 +55,21 @@ def load_background_info(json_path):
 
 def save_annotations(json_path, regions, lines, video_path, frame_idx,
                      width, height):
-    """Write regions and lines to a JSON file."""
-    save_data = {
+    """Write regions and lines to a JSON file, preserving background/track_roi."""
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            save_data = json.load(f)
+    else:
+        save_data = {}
+
+    save_data.update({
         "video": video_path,
         "frame": frame_idx,
         "width": width,
         "height": height,
         "regions": [{"name": r["name"], "xywh": list(r["xywh"])} for r in regions],
         "lines": [{"name": ln["name"], "pts": [list(p) for p in ln["pts"]]} for ln in lines],
-    }
+    })
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(save_data, f, indent=2, ensure_ascii=False)
 

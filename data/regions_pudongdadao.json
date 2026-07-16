@@ -1,0 +1,59 @@
+{
+  "video": "\\\\10.151.2.205\\共享文件2\\短视频\\浦东大道\\clipped_segments\\浦东大道1.mp4",
+  "frame": 171,
+  "width": 1920,
+  "height": 1080,
+  "regions": [
+    {
+      "name": "region_1",
+      "xywh": [
+        1492,
+        192,
+        298,
+        478
+      ]
+    },
+    {
+      "name": "track",
+      "xywh": [
+        14,
+        22,
+        914,
+        890
+      ]
+    }
+  ],
+  "lines": [
+    {
+      "name": "line_1",
+      "pts": [
+        [
+          657,
+          1035
+        ],
+        [
+          898,
+          768
+        ]
+      ]
+    },
+    {
+      "name": "line_2",
+      "pts": [
+        [
+          718,
+          282
+        ],
+        [
+          525,
+          349
+        ]
+      ]
+    }
+  ],
+  "background": {
+    "image": "regions_pudongdadao_background.png",
+    "frame": 20
+  },
+  "track_roi": "track"
+}

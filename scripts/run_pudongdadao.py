@@ -14,7 +14,7 @@ from src.player import VideoPlayer
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-VIDEO_PATH = r"\\10.151.2.205\共享文件2\短视频\浦东大道\clipped_segments\浦东大道6.mp4"  # TODO: fill in video path
+VIDEO_PATH = r"\\10.151.2.205\共享文件2\短视频\浦东大道\clipped_segments\浦东大道1.mp4"  # TODO: fill in video path
 MODEL_PATH = str(Path(MODEL_DIR) / "yolo26x-pose.pt")
 ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_pudongdadao.json")
 
@@ -22,14 +22,19 @@ ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_pudongdadao.json")
 # Detection rules (unique conditions; each runs independently)
 # ---------------------------------------------------------------------------
 DETECTION_RULES = [
-    # TODO: define detection rules
+    {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1", "min_arm_torso_angle": 0},
+    {"name": "rule_B", "type": "parallel_line", "ref_line": "line_2", "allow_elbow": True},
+    {"name": "rule_C", "type": "pass_region", "target_region": "region_1"},
 ]
 
 # ---------------------------------------------------------------------------
 # Action mapping: which rule occurrence maps to which action
 # ---------------------------------------------------------------------------
 ACTION_MAPPING = [
-    # TODO: define action mapping
+    {"action": "Act1 Call", "rule": "rule_A", "occurrence": 1},
+    {"action": "Act2 CloseDoor", "rule": "rule_B", "occurrence": 1},
+    {"action": "Act3 CheckGap", "rule": "rule_A", "occurrence": 2},
+    {"action": "Act4 CheckLight", "rule": "rule_C", "occurrence": 1},
 ]
 
 DETECTION_KWARGS = {
