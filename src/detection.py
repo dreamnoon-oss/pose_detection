@@ -36,10 +36,11 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
             elbow-bend angle ``(shoulder→elbow vs elbow→wrist)`` to the threshold.
 
     Returns:
-        ``(is_parallel, side, angle, far_point, shoulder)``
+        ``(is_parallel, side, angle, far_point, shoulder, effective_threshold, kp_confs)``
+        *kp_confs* is ``(shoulder_conf, far_conf, elbow_conf)`` or None.
     """
     if keypoints_obj is None or line_pts is None:
-        return False, None, None, None, None
+        return False, None, None, None, None, None, None
 
     line_dir = (line_pts[1][0] - line_pts[0][0],
                 line_pts[1][1] - line_pts[0][1])
@@ -90,9 +91,11 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
                     if torso_ang <= min_arm_torso_angle:
                         continue
 
-            return True, side, ang, far_pt, shoulder
+            return True, side, ang, far_pt, shoulder, effective_threshold, (
+                float(conf[shoulder_id]), float(conf[far_id]),
+                float(conf[elbow_id]) if conf[elbow_id] > CONF_THRESHOLD else 0.0)
 
-    return False, None, None, None, None
+    return False, None, None, None, None, None, None
 
 
 # ---------------------------------------------------------------------------

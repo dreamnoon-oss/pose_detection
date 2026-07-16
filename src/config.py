@@ -9,6 +9,8 @@ MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 DEFAULT_MODEL = os.path.join(MODEL_DIR, "yolo26x-pose.pt")
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+VIDEO_OUTPUT_DIR = os.path.join(OUTPUT_DIR, "video")
+REPORT_OUTPUT_DIR = os.path.join(OUTPUT_DIR, "report")
 
 # ---------------------------------------------------------------------------
 # Keypoint indices (COCO 17-keypoint convention)

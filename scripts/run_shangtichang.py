@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     detector = ParallelDetector(
         DETECTION_RULES, regions, lines,
-        hold_frames=30, frame_decay=2, cooldown_frames=90,
+        hold_frames=20, frame_decay=2, cooldown_frames=90,
         detection_kwargs=DETECTION_KWARGS,
     )
 
@@ -61,6 +61,7 @@ if __name__ == "__main__":
         annotations_file=ANNOTATIONS_FILE,
         output_dir=str(Path(OUTPUT_DIR)),
         output_name="pose_output_shangtichang.mp4",
+        station_name="上体场", model_path=MODEL_PATH,
         imgsz=640, frame_skip=0,
         conf_low_threshold=0.3, conf_mid_threshold=0.6,
         train_mad_threshold=20,

@@ -111,3 +111,18 @@ class TrainDetector:
             'PRESENT': '列车在场',
         }
         return labels.get(self.state, self.state)
+
+    @property
+    def train_info(self):
+        """Return structured arrival/departure info for reporting."""
+        info = {"arrive": None, "depart": None, "duration": None}
+        for _frame, ts, etype in self.events:
+            if etype == 'arrived':
+                info["arrive"] = f"{ts:.1f}s"
+            elif etype == 'departed':
+                info["depart"] = f"{ts:.1f}s"
+        if info["arrive"] and info["depart"]:
+            t_arrive = next(ts for f, ts, e in self.events if e == 'arrived')
+            t_depart = next(ts for f, ts, e in self.events if e == 'departed')
+            info["duration"] = f"{t_depart - t_arrive:.1f}s"
+        return info

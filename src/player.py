@@ -1,6 +1,7 @@
 """Interactive video player with pose detection, annotation, and action tracking."""
 
 import os
+import sys
 import time
 import cv2
 
@@ -11,7 +12,8 @@ from .annotation import (select_roi, draw_line_interactive,
                          load_background_info)
 from .analyzer import SequenceAnalyzer
 from .confidence_color import ConfidenceColorMapper
-from .config import CONF_LOW_THRESHOLD, CONF_MID_THRESHOLD
+from .config import CONF_LOW_THRESHOLD, CONF_MID_THRESHOLD, REPORT_OUTPUT_DIR
+from .reporter import generate_report
 from .train_detector import TrainDetector
 
 
@@ -31,6 +33,7 @@ class VideoPlayer:
 
     def __init__(self, model, video_path, detector, action_mapping=None, *,
                  annotations_file, output_dir, output_name="pose_output.mp4",
+                 station_name="", model_path="",
                  model_conf=0.5, imgsz=640, frame_skip=0, half=False,
                  conf_low_threshold=CONF_LOW_THRESHOLD,
                  conf_mid_threshold=CONF_MID_THRESHOLD,
@@ -43,6 +46,8 @@ class VideoPlayer:
         self.annotations_file = annotations_file
         self.output_dir = output_dir
         self.output_name = output_name
+        self.station_name = station_name
+        self.model_path = model_path
         self.model_conf = model_conf
         self.imgsz = imgsz            # model input resolution
         self.frame_skip = frame_skip  # 0=every frame, 1=every 2nd, 2=every 3rd, etc.
@@ -151,10 +156,13 @@ class VideoPlayer:
         self.delay = max(1, int(1000 / self.fps))
 
         os.makedirs(self.output_dir, exist_ok=True)
+        video_dir = os.path.join(self.output_dir, "video")
+        os.makedirs(video_dir, exist_ok=True)
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out_path = os.path.join(self.output_dir, self.output_name)
+        out_path = os.path.join(video_dir, self.output_name)
         self.out = cv2.VideoWriter(out_path, fourcc, self.fps,
                                    (self.width, self.height))
+        self._output_video_path = out_path
 
         self.window_name = "Pose Detection (5-12 keypoints)"
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
@@ -173,7 +181,7 @@ class VideoPlayer:
         if self.out is not None:
             self.out.release()
         cv2.destroyAllWindows()
-        print(f"结果已保存到: {os.path.join(self.output_dir, self.output_name)}")
+        print(f"检测视频已保存到: {self._output_video_path}")
 
     # ------------------------------------------------------------------
     # Internal: per-frame processing
@@ -486,4 +494,29 @@ class VideoPlayer:
         if self.train_detector is not None:
             end_time = self.total_frames / self.fps if self.fps else 0
             print("\n" + self.train_detector.summary(end_time))
+
+        # Generate Excel report
+        script_name = os.path.basename(sys.argv[0])
+        report_dir = os.path.join(self.output_dir, "report")
+        os.makedirs(report_dir, exist_ok=True)
+        report_name = self.output_name.replace("pose_output_", "report_").replace(".mp4", ".csv")
+        report_path = os.path.join(report_dir, report_name)
+        train_info = self.train_detector.train_info if self.train_detector else None
+        generate_report(
+            report_path,
+            station_name=self.station_name,
+            script_name=script_name,
+            video_path=self.video_path,
+            output_video_path=self._output_video_path,
+            model_path=self.model_path,
+            imgsz=self.imgsz,
+            model_conf=self.model_conf,
+            train_summary=train_info,
+            action_results=self._analysis['actions'],
+            action_mapping=self.action_mapping,
+            detection_kwargs=self.detector.detection_kwargs,
+            rules=self.detector.rules,
+        )
+        print(f"检测报告已保存到: {report_path}")
+
         return viz.draw_analysis_result(frame, self._analysis)

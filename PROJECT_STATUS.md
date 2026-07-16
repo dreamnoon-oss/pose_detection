@@ -75,7 +75,7 @@ All rules run independently per frame → timestamped events → mapped to actio
 |-------|-------|-------|
 | angle_threshold | 40° | arm vs ref_line (PAR) |
 | min_arm_torso_angle | 45° | prevents false triggers (per-rule overridable) |
-| hold_frames | 30 | consecutive confirm count |
+| hold_frames | 20 | consecutive confirm count |
 | frame_decay | 2/frame | tolerates brief dropout |
 | cooldown | 90 frames | prevents event splitting |
 | ray extend | 6× | pass_region extension |
@@ -86,10 +86,14 @@ All rules run independently per frame → timestamped events → mapped to actio
 
 ## Recent Changes
 
-- **Dynamic angle compensation**: All stations now use `dynamic_angle` on parallel_line rules. Effective threshold = 40° + arm_bend × 0.6, compensating for 2D foreshortening when the arm is not perfectly straight in the camera plane.
-- **2026-07-16**: Pudongdadao, Linping, Longhuazhong stations activated with full rules and action mappings. Removed deprecated Streamlit dashboard (`app.py`) and v1 serial state machine (`src/state_machine.py`). Fixed `save_annotations` to preserve `background` and `track_roi` fields on save. Cleaned up stale cache and old package layout.
-- **2026-07-15**: Train MAD threshold lowered 30→20 across all stations. Fix per-rule torso angle override. Jingansi train detection enabled. Tangqiao station activated.
-- **Confidence colour system**: Three-tier keypoint colouring with configurable thresholds and legend overlay.
-- **New station scripts**: Added `run_pudongdadao.py`, `run_linping.py`, `run_jingansi.py`, `run_longhuazhong.py`, `run_tangqiao.py`.
-- **Critical bugfix: false trackbar seek loop** — skip seek when position delta ≤ 1.
-- **Train detector rewritten**: Pure accumulation counter.
+- **2026-07-16**: 
+  - **Confidence quality metrics**: conf (keypoint avg), hit_rate (hit/total frames), margin (effective threshold − actual angle) computed at event trigger and displayed in SequenceAnalyzer summary.
+  - **CSV report generation** (`src/reporter.py`): Auto-generated after video ends to `output/report/report_xxx.csv`. Contains station info, model params, train arrival/departure, per-action results with quality metrics, overall evaluation.
+  - **Output directory restructured**: `output/video/` for annotated videos, `output/report/` for CSV reports.
+  - **Standard 5-action template**: 开门后手指呼唤 / 手动关门 / 关门后确认夹缝 / 开车前确认站台指示灯 / 开车前确认站台道岔. Missing actions marked "不需要".
+  - All stations now pass `station_name` and `model_path` to VideoPlayer for report generation.
+  - `TrainDetector` added `train_info` property for structured arrival/departure data.
+  - Dynamic angle compensation: all stations use `dynamic_angle` on parallel_line rules. Effective threshold = 40° + arm_bend × 0.6, compensating for 2D foreshortening.
+  - Pudongdadao, Linping, Longhuazhong stations activated with full rules and action mappings.
+  - Removed deprecated Streamlit dashboard (`app.py`) and v1 serial state machine (`src/state_machine.py`).
+  - Fixed `save_annotations` to preserve `background` and `track_roi` fields on save. Cleaned up stale cache and old package layout.

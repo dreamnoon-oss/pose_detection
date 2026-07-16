@@ -39,6 +39,9 @@ class SequenceAnalyzer:
                     'timestamp': ev['frame'] / self.fps if self.fps else 0,
                     'side': ev['side'],
                     'angle': ev['angle'],
+                    'conf': ev.get('conf'),
+                    'hit_rate': ev.get('hit_rate'),
+                    'margin': ev.get('margin'),
                     'found': True,
                 })
             else:
@@ -84,6 +87,15 @@ class SequenceAnalyzer:
                     f"@ {ts:.1f}s (f{a['frame']})  "
                     f"{side_label}  {a['angle']:.0f}deg"
                 )
+                parts = []
+                if a.get('conf') is not None:
+                    parts.append(f"conf={a['conf']:.2f}")
+                if a.get('hit_rate') is not None:
+                    parts.append(f"hit={a['hit_rate']:.2f}")
+                if a.get('margin') is not None:
+                    parts.append(f"margin={a['margin']:.1f}deg")
+                if parts:
+                    lines.append(f"         Quality: {'  '.join(parts)}")
             else:
                 lines.append(f"  [X] {a['action']:<14s}  Not Detected")
 

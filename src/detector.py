@@ -34,6 +34,11 @@ class ParallelDetector:
         self.events = []
         self.enabled = True
 
+        # Per-rule quality tracking (reset on event fire or hold→0)
+        self._hit_counts = {r['name']: 0 for r in rules}
+        self._first_hit_frames = {r['name']: 0 for r in rules}
+        self._conf_sums = {r['name']: [0.0, 0.0, 0.0] for r in rules}  # [s, f, e]
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -43,6 +48,9 @@ class ParallelDetector:
         for name in self.hold_counters:
             self.hold_counters[name] = 0
             self.cooldown_counters[name] = 0
+            self._hit_counts[name] = 0
+            self._first_hit_frames[name] = 0
+            self._conf_sums[name] = [0.0, 0.0, 0.0]
         self.frame_number = 0
         self.events.clear()
 
@@ -52,6 +60,9 @@ class ParallelDetector:
         for name in self.hold_counters:
             self.hold_counters[name] = 0
             self.cooldown_counters[name] = 0
+            self._hit_counts[name] = 0
+            self._first_hit_frames[name] = 0
+            self._conf_sums[name] = [0.0, 0.0, 0.0]
 
     def update(self, keypoints_obj):
         """Process one frame against all rules.
@@ -78,10 +89,20 @@ class ParallelDetector:
                 self.cooldown_counters[name] -= 1
                 continue
 
-            is_hit, side, angle, wrist, shoulder = self._detect(rule, keypoints_obj)
+            is_hit, side, angle, wrist, shoulder, eff_thresh, kp_confs = \
+                self._detect(rule, keypoints_obj)
 
             if is_hit:
+                if self.hold_counters[name] == 0:
+                    self._first_hit_frames[name] = self.frame_number
                 self.hold_counters[name] += 1
+                self._hit_counts[name] += 1
+                if kp_confs:
+                    s_c, f_c, e_c = kp_confs
+                    self._conf_sums[name][0] += s_c
+                    self._conf_sums[name][1] += f_c
+                    self._conf_sums[name][2] += e_c
+
                 active[name] = {
                     'rule': name,
                     'side': side,
@@ -93,6 +114,13 @@ class ParallelDetector:
                 }
 
                 if self.hold_counters[name] >= self.hold_frames:
+                    total_frames = self.frame_number - self._first_hit_frames[name] + 1 \
+                        if self._first_hit_frames[name] > 0 else self.hold_frames
+                    hit_rate = self._hit_counts[name] / total_frames
+                    n_hits = max(self._hit_counts[name], 1)
+                    avg_conf = sum(self._conf_sums[name]) / (n_hits * 3)
+                    margin = eff_thresh - angle if eff_thresh is not None else None
+
                     event = {
                         'rule': name,
                         'frame': self.frame_number,
@@ -100,14 +128,24 @@ class ParallelDetector:
                         'angle': angle,
                         'wrist': wrist,
                         'shoulder': shoulder,
+                        'conf': round(avg_conf, 3),
+                        'hit_rate': round(hit_rate, 3),
+                        'margin': round(margin, 1) if margin is not None else None,
                     }
                     self.events.append(event)
                     new_events.append(event)
                     self.hold_counters[name] = 0
                     self.cooldown_counters[name] = self.cooldown_frames
+                    self._hit_counts[name] = 0
+                    self._first_hit_frames[name] = 0
+                    self._conf_sums[name] = [0.0, 0.0, 0.0]
             else:
                 self.hold_counters[name] = max(
                     0, self.hold_counters[name] - self.frame_decay)
+                if self.hold_counters[name] == 0:
+                    self._hit_counts[name] = 0
+                    self._first_hit_frames[name] = 0
+                    self._conf_sums[name] = [0.0, 0.0, 0.0]
 
         return active, new_events
 
@@ -123,7 +161,7 @@ class ParallelDetector:
         if rtype == 'parallel_line':
             line = self._get_line(rule.get('ref_line'))
             if line is None:
-                return False, None, None, None, None
+                return False, None, None, None, None, None, None
             return det.check_arm_parallel_to_line(
                 keypoints_obj, line,
                 min_arm_len=kw.get('min_arm_len', 30),
@@ -137,36 +175,39 @@ class ParallelDetector:
         elif rtype == 'pass_region':
             region = self._get_region(rule.get('target_region'))
             if region is None:
-                return False, None, None, None, None
-            return det.check_arm_passes_region(
+                return False, None, None, None, None, None, None
+            is_hit, side, angle, wrist, shoulder = det.check_arm_passes_region(
                 keypoints_obj, region,
                 min_arm_len=kw.get('min_arm_len', 30),
                 extend_ray=kw.get('extend_ray', True),
             )
+            return is_hit, side, angle, wrist, shoulder, None, None
 
         elif rtype == 'pointing':
             region = self._get_region(rule.get('target_region'))
             if region is None:
-                return False, None, None, None, None
-            return det.check_pointing(
+                return False, None, None, None, None, None, None
+            is_hit, side, angle, wrist, shoulder = det.check_pointing(
                 keypoints_obj, region,
                 min_arm_len=kw.get('min_arm_len', 30),
                 angle_threshold=kw.get('angle_threshold', 30),
             )
+            return is_hit, side, angle, wrist, shoulder, None, None
 
         elif rtype == 'pointing_with_line':
             region = self._get_region(rule.get('target_region'))
             line = self._get_line(rule.get('ref_line'))
             if region is None or line is None:
-                return False, None, None, None, None
-            return det.check_pointing_with_line(
+                return False, None, None, None, None, None, None
+            is_hit, side, angle, wrist, shoulder = det.check_pointing_with_line(
                 keypoints_obj, region, line,
                 min_arm_len=kw.get('min_arm_len', 30),
                 line_angle_threshold=kw.get('line_angle_threshold', 40),
                 loose_angle_threshold=kw.get('loose_angle_threshold', 55),
             )
+            return is_hit, side, angle, wrist, shoulder, None, None
 
-        return False, None, None, None, None
+        return False, None, None, None, None, None, None
 
     def _get_region(self, name):
         for r in self.regions:
