@@ -170,6 +170,8 @@ class ParallelDetector:
                 min_arm_torso_angle=rule.get('min_arm_torso_angle',
                     kw.get('min_arm_torso_angle', 0.0)),
                 dynamic_angle=rule.get('dynamic_angle', False),
+                dynamic_angle_coeff=kw.get('dynamic_angle_coeff', 0.6),
+                anti_parallel=rule.get('anti_parallel', False),
             )
 
         elif rtype == 'pass_region':

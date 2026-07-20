@@ -51,7 +51,7 @@ pose_detection/
 
 | 类型 | 函数 | 说明 |
 |------|------|------|
-| `parallel_line` | `check_arm_parallel_to_line()` | 肩→腕向量与参考线夹角 < 阈值（支持动态角度补偿）。可选肘部回退、躯干夹角下限 |
+| `parallel_line` | `check_arm_parallel_to_line()` | 肩→腕向量与参考线夹角 < 阈值。支持动态角度补偿、反向平行（anti_parallel）、肘部回退、躯干夹角下限 |
 | `pass_region` | `check_arm_passes_region()` | 肩→腕射线（可延长）穿过/落在矩形区域内 |
 | `pointing` | `check_pointing()` | 手臂方向与区域角点夹角 < 阈值 |
 | `pointing_with_line` | `check_pointing_with_line()` | 手臂平行于线 且 朝向区域 |
@@ -68,7 +68,7 @@ pose_detection/
 | 帧衰减 | -2/帧 | 容忍短暂丢帧 |
 | 冷却期 | 90 帧 | 事件触发后同规则暂停检测 |
 | 最小手臂长度 | 30px | 过滤无效检测 |
-| 动态角度系数 | 0.6× | 肘部弯曲补偿系数，实际阈值 = 40° + 弯曲角 × 0.6 |
+| 动态角度系数 | 0.6× | 肘部弯曲补偿系数，通过 `DETECTION_KWARGS["dynamic_angle_coeff"]` 按站点调整。实际阈值 = 40° + 弯曲角 × 系数 |
 
 ## 已配置站点
 
@@ -78,7 +78,7 @@ pose_detection/
 | 宝山 | `run_baoshan.py` | P+L + POINT | 5 |
 | 静安寺 | `run_jingansi.py` | PAR + CROSS | 4 |
 | 塘桥 | `run_tangqiao.py` | PAR + CROSS | 4 |
-| 浦东大道 | `run_pudongdadao.py` | PAR + CROSS | 4 |
+| 浦东大道 | `run_pudongdadao.py` | PAR + CROSS | 5 |
 | 临平 | `run_linping.py` | PAR + CROSS | 4 |
 | 龙华中 | `run_longhuazhong.py` | PAR + CROSS | 4 |
 
@@ -92,6 +92,22 @@ pose_detection/
 | 动作2 | rule_B (第1次) | parallel_line | line_2（肘部回退+躯干夹角） |
 | 动作3 | rule_A (第2次) | parallel_line | line_1 |
 | 动作4 | rule_C (第1次) | pass_region | region_1（延长射线） |
+
+### 反向平行检测（anti_parallel）
+
+部分站点需要司机**背对**参考线做出确认动作（如道岔确认）。此时手臂方向与参考线接近 180° 而非 0°。
+
+通过规则配置 `"anti_parallel": True`，判定条件从 `ang < threshold` 翻转为 `ang >= 180° - threshold`（即手臂与参考线反向夹角在阈值内）。同样支持动态角度补偿。
+
+**浦东大道（5 动作，含道岔）：**
+
+| 动作 | 规则 | 检测类型 | 目标 |
+|------|------|------|------|
+| 动作1 | rule_A (第1次) | parallel_line | line_1 |
+| 动作2 | rule_B (第1次) | parallel_line | line_2（肘部回退+躯干夹角） |
+| 动作3 | rule_A (第2次) | parallel_line | line_1 |
+| 动作4 | rule_C (第1次) | pass_region | region_1（延长射线） |
+| 动作5 | rule_D (第1次) | parallel_line (anti_parallel) | line_1（反向，140°~180°） |
 
 ## 实时指标面板
 

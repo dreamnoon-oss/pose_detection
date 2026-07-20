@@ -14,7 +14,7 @@ from src.player import VideoPlayer
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-VIDEO_PATH = r"\\10.151.2.205\共享文件2\司机行为规范样本采样\短视频\宝山4.mp4"
+VIDEO_PATH = r"\\10.151.2.205\共享文件2\司机行为规范样本采样\短视频\宝山3.mp4"
 MODEL_PATH = str(Path(MODEL_DIR) / "yolo26x-pose.pt")
 ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_baoshan.json")
 
@@ -25,6 +25,7 @@ DETECTION_RULES = [
     {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1", "min_arm_torso_angle": 0, "dynamic_angle": True},
     {"name": "rule_B", "type": "parallel_line", "ref_line": "line_2", "allow_elbow": True, "dynamic_angle": True},
     {"name": "rule_C", "type": "pass_region", "target_region": "region_1"},
+    {"name": "rule_D", "type": "parallel_line", "ref_line": "line_1", "anti_parallel": True, "dynamic_angle": True},
 ]
 
 # ---------------------------------------------------------------------------
@@ -35,14 +36,15 @@ ACTION_MAPPING = [
     {"action": "Act2", "rule": "rule_B", "occurrence": 1},
     {"action": "Act3", "rule": "rule_A", "occurrence": 2},
     {"action": "Act4", "rule": "rule_C", "occurrence": 1},
+    {"action": "Act5 CheckSwitch", "rule": "rule_D", "occurrence": 1},
 ]
 
 DETECTION_KWARGS = {
     "angle_threshold": 40,
     "min_arm_len": 30,
     "min_arm_torso_angle": 45,  # 手臂 vs 躯干夹角需 >45°，防止未抬臂的误触发
+    "dynamic_angle_coeff": 0.6,
 }
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -67,3 +69,6 @@ if __name__ == "__main__":
         train_mad_threshold=20,
     )
     player.run()
+
+
+

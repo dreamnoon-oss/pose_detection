@@ -18,7 +18,9 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
                                min_arm_len=30, angle_threshold=40,
                                allow_elbow=False,
                                min_arm_torso_angle=0.0,
-                               dynamic_angle=False):
+                               dynamic_angle=False,
+                               dynamic_angle_coeff=0.6,
+                               anti_parallel=False):
     """Check whether any person's arm is roughly parallel to a reference line.
 
     Args:
@@ -34,6 +36,9 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
             shoulder→hip, same side) must exceed this value. Default 0 = no check.
         dynamic_angle: if True, compensate for 2D foreshortening by adding the
             elbow-bend angle ``(shoulder→elbow vs elbow→wrist)`` to the threshold.
+        dynamic_angle_coeff: multiplier for elbow-bend compensation (default 0.6).
+        anti_parallel: if True, check for arm pointing *opposite* to the line
+            direction (angle within threshold of 180° instead of 0°).
 
     Returns:
         ``(is_parallel, side, angle, far_point, shoulder, effective_threshold, kp_confs)``
@@ -65,7 +70,7 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
                     lower = (float(xy[wrist_id][0]) - elbow[0],
                              float(xy[wrist_id][1]) - elbow[1])
                     arm_bend = angle_between(upper, lower)
-                    effective_threshold = angle_threshold + arm_bend * 0.6
+                    effective_threshold = angle_threshold + arm_bend * dynamic_angle_coeff
             elif allow_elbow and conf[elbow_id] > CONF_THRESHOLD:
                 far_id = elbow_id
 
@@ -78,8 +83,12 @@ def check_arm_parallel_to_line(keypoints_obj, line_pts, *,
                 continue
 
             ang = angle_between(arm_dir, line_dir)
-            if ang >= effective_threshold:
-                continue
+            if anti_parallel:
+                if ang < 180.0 - effective_threshold:
+                    continue
+            else:
+                if ang >= effective_threshold:
+                    continue
 
             # Optional: arm vs torso angle check (same-side shoulder→hip)
             if min_arm_torso_angle > 0:

@@ -14,7 +14,7 @@ from src.player import VideoPlayer
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-VIDEO_PATH = r"\\10.151.2.205\共享文件2\短视频\浦东大道\clipped_segments\浦东大道1.mp4"  # TODO: fill in video path
+VIDEO_PATH = r"\\10.151.2.205\共享文件2\短视频\浦东大道\clipped_segments\浦东大道2.mp4"  # TODO: fill in video path
 MODEL_PATH = str(Path(MODEL_DIR) / "yolo26x-pose.pt")
 ANNOTATIONS_FILE = str(Path(DATA_DIR) / "regions_pudongdadao.json")
 
@@ -25,6 +25,7 @@ DETECTION_RULES = [
     {"name": "rule_A", "type": "parallel_line", "ref_line": "line_1", "min_arm_torso_angle": 0, "dynamic_angle": True},
     {"name": "rule_B", "type": "parallel_line", "ref_line": "line_2", "allow_elbow": True, "dynamic_angle": True},
     {"name": "rule_C", "type": "pass_region", "target_region": "region_1"},
+    {"name": "rule_D", "type": "parallel_line", "ref_line": "line_1", "anti_parallel": True, "dynamic_angle": True},
 ]
 
 # ---------------------------------------------------------------------------
@@ -35,12 +36,14 @@ ACTION_MAPPING = [
     {"action": "Act2 CloseDoor", "rule": "rule_B", "occurrence": 1},
     {"action": "Act3 CheckGap", "rule": "rule_A", "occurrence": 2},
     {"action": "Act4 CheckLight", "rule": "rule_C", "occurrence": 1},
+    {"action": "Act5 CheckSwitch", "rule": "rule_D", "occurrence": 1},
 ]
 
 DETECTION_KWARGS = {
     "angle_threshold": 40,
     "min_arm_len": 30,
     "min_arm_torso_angle": 45,
+    "dynamic_angle_coeff": 0.6,
 }
 
 # ---------------------------------------------------------------------------

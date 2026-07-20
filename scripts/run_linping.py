@@ -41,6 +41,7 @@ DETECTION_KWARGS = {
     "angle_threshold": 40,
     "min_arm_len": 30,
     "min_arm_torso_angle": 45,
+    "dynamic_angle_coeff": 0.6,
 }
 
 # ---------------------------------------------------------------------------
