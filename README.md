@@ -37,6 +37,7 @@ pose_detection/
 │   ├── run_jingansi.py
 │   ├── run_tangqiao.py
 │   ├── run_pudongdadao.py
+│   ├── run_pudongdadao_test.py  # 测试版（FP16 / 手臂弯曲角显示）
 │   ├── run_linping.py
 │   └── run_longhuazhong.py
 ├── data/                   # 标注数据 (JSON + 背景图)
@@ -108,6 +109,15 @@ pose_detection/
 | 动作3 | rule_A (第2次) | parallel_line | line_1 |
 | 动作4 | rule_C (第1次) | pass_region | region_1（延长射线） |
 | 动作5 | rule_D (第1次) | parallel_line (anti_parallel) | line_1（反向，140°~180°） |
+
+### 同帧冲突仲裁
+
+同一帧内多个角度类规则（`parallel_line`、`pointing`、`pointing_with_line`）同时达到触发阈值时，计算归一化置信度分数，只保留最可信的一个：
+
+- **正向平行**：`score = angle / effective_threshold`（分数越小越可信）
+- **反向平行**：`score = (180° - angle) / effective_threshold`
+- 被淘汰的规则 hold counter 归零、**不进冷却**，可立即重新累积
+- **`pass_region` 豁免**，不受仲裁影响，独立触发
 
 ## 实时指标面板
 
@@ -212,6 +222,7 @@ python scripts/run_baoshan.py        # 宝山（角度法）
 python scripts/run_jingansi.py       # 静安寺
 python scripts/run_tangqiao.py       # 塘桥
 python scripts/run_pudongdadao.py    # 浦东大道
+python scripts/run_pudongdadao_test.py  # 浦东大道（测试版）
 python scripts/run_linping.py        # 临平
 python scripts/run_longhuazhong.py   # 龙华中
 ```

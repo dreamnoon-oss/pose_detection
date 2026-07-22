@@ -131,6 +131,7 @@ class ParallelDetector:
                         'conf': round(avg_conf, 3),
                         'hit_rate': round(hit_rate, 3),
                         'margin': round(margin, 1) if margin is not None else None,
+                        'effective_threshold': round(eff_thresh, 1) if eff_thresh is not None else None,
                     }
                     self.events.append(event)
                     new_events.append(event)
@@ -146,6 +147,39 @@ class ParallelDetector:
                     self._hit_counts[name] = 0
                     self._first_hit_frames[name] = 0
                     self._conf_sums[name] = [0.0, 0.0, 0.0]
+
+        # ------------------------------------------------------------------
+        # Conflict resolution: when multiple angle-based rules fire in the
+        # same frame, keep only the one with the lowest normalised score.
+        # pass_region rules are exempt — they fire independently.
+        # Suppressed rules: hold counter reset, NO cooldown (can immediately
+        # re-accumulate for the next genuine occurrence).
+        # ------------------------------------------------------------------
+        _rule_map = {r['name']: r for r in self.rules}
+        _angle_events = [e for e in new_events
+                         if _rule_map[e['rule']]['type'] != 'pass_region'
+                         and e.get('effective_threshold') is not None]
+        if len(_angle_events) >= 2:
+            def _score(ev):
+                rule = _rule_map[ev['rule']]
+                ang = ev['angle']
+                if rule.get('anti_parallel'):
+                    ang = 180.0 - ang
+                return ang / ev['effective_threshold']
+
+            _angle_events.sort(key=_score)
+            winner = _angle_events[0]
+            for ev in _angle_events[1:]:
+                name = ev['rule']
+                # Remove from both lists
+                new_events.remove(ev)
+                if ev in self.events:
+                    self.events.remove(ev)
+                # Reset hold counter (no cooldown — ready to re-accumulate)
+                self.hold_counters[name] = 0
+                self._hit_counts[name] = 0
+                self._first_hit_frames[name] = 0
+                self._conf_sums[name] = [0.0, 0.0, 0.0]
 
         return active, new_events
 

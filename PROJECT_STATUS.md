@@ -1,6 +1,6 @@
 # Project Status — 端头门司机行为分析
 
-**Updated:** 2026-07-16
+**Updated:** 2026-07-22
 
 ## Architecture
 
@@ -85,6 +85,11 @@ All rules run independently per frame → timestamped events → mapped to actio
 | dynamic_angle_coeff | 0.6 | elbow bend compensation for 2D foreshortening |
 
 ## Recent Changes
+
+- **2026-07-22**:
+  - **同帧冲突仲裁** (`src/detector.py`): 同一帧多个角度类规则同时触发时，计算归一化分数（`angle / effective_threshold`），只保留最可信的一个。被淘汰的规则不进冷却，可立即重新累积。`pass_region` 豁免。
+  - **浦东大道测试版脚本** (`scripts/run_pudongdadao_test.py`): FP16 推理、手臂弯曲角实时显示，独立输出文件名。
+  - **`data/` 目录加入 `.gitignore`**: 标注数据不再上传至远程仓库（保密）。
 
 - **2026-07-16**: 
   - **Confidence quality metrics**: conf (keypoint avg), hit_rate (hit/total frames), margin (effective threshold − actual angle) computed at event trigger and displayed in SequenceAnalyzer summary.

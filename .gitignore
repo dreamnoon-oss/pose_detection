@@ -2,6 +2,9 @@
 *.pt
 *.7z
 
+# 标注数据（保密）
+data/
+
 # 输出
 output/
 runs/
