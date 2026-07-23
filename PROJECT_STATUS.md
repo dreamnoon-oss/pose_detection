@@ -1,6 +1,6 @@
 # Project Status — 端头门司机行为分析
 
-**Updated:** 2026-07-22
+**Updated:** 2026-07-23
 
 ## Architecture
 
@@ -45,11 +45,11 @@ All rules run independently per frame → timestamped events → mapped to actio
 |----------|--------|---------|-------|--------|
 | Shangtichang | `scripts/run_shangtichang.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Done |
 | Baoshan | `scripts/run_baoshan.py` | Act1 PointFwd, Act2 CheckR2, Act3 PointFwd, Act4 CheckR3, Act5 CheckR4 | P+L + POINT | Done |
-| Jingansi | `scripts/run_jingansi.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Done |
+| Jingansi | `scripts/run_jingansi.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight, Act5 CheckSwitch | PAR + CROSS | Done |
 | Tangqiao | `scripts/run_tangqiao.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Done |
-| Pudongdadao | `scripts/run_pudongdadao.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Done |
+| Pudongdadao | `scripts/run_pudongdadao.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight, Act5 CheckSwitch | PAR + CROSS | Done |
 | Linping | `scripts/run_linping.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Done |
-| Longhuazhong | `scripts/run_longhuazhong.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight | PAR + CROSS | Done |
+| Longhuazhong | `scripts/run_longhuazhong.py` | Act1 Call, Act2 CloseDoor, Act3 CheckGap, Act4 CheckLight, Act5 CheckSwitch | PAR + CROSS | Done |
 
 ### Train Detection (all configured stations)
 | Station | Background | Track ROI | Train MAD Threshold |
@@ -86,9 +86,12 @@ All rules run independently per frame → timestamped events → mapped to actio
 
 ## Recent Changes
 
+- **2026-07-23**:
+  - **静安寺、龙华中新增道岔检测（Act5 CheckSwitch）**: 复用 `line_1` + `anti_parallel`，与浦东大道逻辑一致。两站动作数从 4→5。
+  - **删除浦东大道测试脚本** (`scripts/run_pudongdadao_test.py`): 测试功能已合并至正式版，不再需要独立脚本。
+
 - **2026-07-22**:
   - **同帧冲突仲裁** (`src/detector.py`): 同一帧多个角度类规则同时触发时，计算归一化分数（`angle / effective_threshold`），只保留最可信的一个。被淘汰的规则不进冷却，可立即重新累积。`pass_region` 豁免。
-  - **浦东大道测试版脚本** (`scripts/run_pudongdadao_test.py`): FP16 推理、手臂弯曲角实时显示，独立输出文件名。
   - **`data/` 目录加入 `.gitignore`**: 标注数据不再上传至远程仓库（保密）。
 
 - **2026-07-16**: 

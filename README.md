@@ -37,7 +37,6 @@ pose_detection/
 │   ├── run_jingansi.py
 │   ├── run_tangqiao.py
 │   ├── run_pudongdadao.py
-│   ├── run_pudongdadao_test.py  # 测试版（FP16 / 手臂弯曲角显示）
 │   ├── run_linping.py
 │   └── run_longhuazhong.py
 ├── data/                   # 标注数据 (JSON + 背景图)
@@ -77,11 +76,11 @@ pose_detection/
 |------|------|------|--------|
 | 上体场 | `run_shangtichang.py` | PAR + CROSS | 4 |
 | 宝山 | `run_baoshan.py` | P+L + POINT | 5 |
-| 静安寺 | `run_jingansi.py` | PAR + CROSS | 4 |
+| 静安寺 | `run_jingansi.py` | PAR + CROSS | 5 |
 | 塘桥 | `run_tangqiao.py` | PAR + CROSS | 4 |
 | 浦东大道 | `run_pudongdadao.py` | PAR + CROSS | 5 |
 | 临平 | `run_linping.py` | PAR + CROSS | 4 |
-| 龙华中 | `run_longhuazhong.py` | PAR + CROSS | 4 |
+| 龙华中 | `run_longhuazhong.py` | PAR + CROSS | 5 |
 
 所有站点均已配置列车进出站检测（背景帧差法）。
 
@@ -222,7 +221,6 @@ python scripts/run_baoshan.py        # 宝山（角度法）
 python scripts/run_jingansi.py       # 静安寺
 python scripts/run_tangqiao.py       # 塘桥
 python scripts/run_pudongdadao.py    # 浦东大道
-python scripts/run_pudongdadao_test.py  # 浦东大道（测试版）
 python scripts/run_linping.py        # 临平
 python scripts/run_longhuazhong.py   # 龙华中
 ```
